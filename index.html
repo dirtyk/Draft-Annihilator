@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KK Holiday Draft Annihilator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #080d1a; --surface: #0f1825; --surface2: #162035; --surface3: #1e2d46;
+  --border: #243452; --accent: #00d4ff; --accent2: #ff6b35;
+  --green: #22c55e; --yellow: #f59e0b; --red: #ef4444;
+  --text: #e8eaf0; --muted: #5a6a88;
+  --qb: #ff6b35; --rb: #22c55e; --wr: #00d4ff; --te: #a855f7; --pick: #f59e0b;
+  --header-h: 56px;
+  --connect-h: 68px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; background: var(--bg); }
+body { font-family: 'Barlow', sans-serif; color: var(--text); font-size: 14px; }
+
+/* ══ HEADER ══ */
+.header {
+  height: var(--header-h);
+  background: linear-gradient(135deg, #0a1220 0%, #0f1825 100%);
+  border-bottom: 2px solid var(--accent);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 20px; position: sticky; top: 0; z-index: 100;
+  box-shadow: 0 4px 30px rgba(0,212,255,0.15);
+}
+.logo {
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 900;
+  font-size: 24px; letter-spacing: 3px; text-transform: uppercase;
+  color: var(--accent); text-shadow: 0 0 20px rgba(0,212,255,0.5);
+}
+.logo span { color: var(--accent2); }
+.header-center { display: flex; align-items: center; gap: 8px; }
+.stat-pill {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+  padding: 4px 14px; font-family: 'Barlow Condensed', sans-serif;
+  font-size: 13px; font-weight: 700; letter-spacing: 1px; color: var(--muted);
+}
+.stat-pill strong { color: var(--text); }
+.header-right { display: flex; align-items: center; gap: 10px; }
+.live-pill {
+  display: flex; align-items: center; gap: 7px;
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+  padding: 4px 12px; transition: border-color 0.3s;
+}
+.live-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--muted);
+  flex-shrink: 0; transition: background 0.3s, box-shadow 0.3s;
+}
+.live-dot.live { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 1.5s infinite; }
+.live-dot.err  { background: var(--red); }
+.live-label { font-family: 'Barlow Condensed', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 1px; color: var(--muted); }
+.live-label.live { color: var(--green); }
+.live-label.err  { color: var(--red); }
+
+/* ══ CONNECT BAR ══ */
+.connect-bar {
+  height: var(--connect-h);
+  background: linear-gradient(135deg, var(--surface), var(--surface2));
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 12px; padding: 0 16px;
+  flex-shrink: 0;
+}
+.sleeper-badge {
+  background: linear-gradient(135deg, #7c3aed, #4f46e5); color: #fff;
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+  font-size: 12px; letter-spacing: 2px; padding: 5px 12px; border-radius: 6px;
+  white-space: nowrap; flex-shrink: 0;
+}
+.connect-field { display: flex; flex-direction: column; gap: 3px; }
+.connect-field label { font-size: 10px; color: var(--muted); font-family: 'Barlow Condensed', sans-serif; letter-spacing: 1px; text-transform: uppercase; }
+.connect-input {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text); padding: 6px 10px; font-family: 'Barlow', sans-serif;
+  font-size: 13px; outline: none; transition: border-color 0.2s;
+}
+.connect-input:focus { border-color: var(--accent); }
+.connect-input::placeholder { color: var(--muted); }
+.connect-actions { display: flex; gap: 6px; align-items: flex-end; margin-left: auto; flex-shrink: 0; }
+
+/* Buttons */
+.btn {
+  background: linear-gradient(135deg, var(--accent), #0099bb); border: none;
+  border-radius: 6px; color: #000; font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800; font-size: 13px; letter-spacing: 1px; padding: 8px 16px;
+  cursor: pointer; transition: all 0.2s; text-transform: uppercase; white-space: nowrap;
+}
+.btn:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,212,255,0.4); }
+.btn.purple { background: linear-gradient(135deg, #7c3aed, #4f46e5); color: #fff; }
+.btn.purple:hover { box-shadow: 0 4px 20px rgba(124,58,237,0.5); }
+.btn.danger { background: linear-gradient(135deg, var(--red), #c53030); color: #fff; }
+.btn.danger:hover { box-shadow: 0 4px 20px rgba(239,68,68,0.4); }
+.btn.outline { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+.btn.outline:hover { border-color: var(--accent); color: var(--accent); box-shadow: none; transform: none; }
+.btn.sm { padding: 6px 12px; font-size: 12px; }
+.btn:active { transform: scale(0.97); }
+
+/* ══ MAIN 3-COL LAYOUT ══ */
+.main {
+  display: grid;
+  grid-template-columns: 1fr 1fr 300px;
+  height: calc(100vh - var(--header-h) - var(--connect-h));
+  overflow: hidden;
+  transition: grid-template-columns 0.3s ease;
+}
+.main.log-collapsed {
+  grid-template-columns: 1fr 38px 300px;
+}
+
+/* Collapsed log panel */
+.log-panel { display: flex; flex-direction: column; overflow: hidden; transition: all 0.3s ease; }
+.log-panel + .panel { border-left: 1px solid var(--border); }
+.log-panel .panel-scroll { overflow-y: auto; flex: 1; scrollbar-width: thin; scrollbar-color: var(--border) transparent; transition: opacity 0.2s ease; }
+.log-panel.collapsed .panel-scroll { opacity: 0; pointer-events: none; overflow: hidden; }
+
+.log-toggle-btn {
+  background: transparent; border: none; cursor: pointer;
+  color: var(--muted); padding: 2px 4px; border-radius: 4px;
+  font-size: 14px; line-height: 1; transition: all 0.15s;
+  display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; flex-shrink: 0;
+}
+.log-toggle-btn:hover { color: var(--accent); background: var(--surface2); }
+
+/* Vertical title when collapsed */
+.log-panel-header {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 10px 14px; display: flex; align-items: center; justify-content: space-between;
+  flex-shrink: 0; cursor: pointer; user-select: none;
+  transition: padding 0.3s ease;
+}
+.log-panel-header:hover { background: var(--surface2); }
+.log-panel.collapsed .log-panel-header {
+  padding: 10px 7px;
+  flex-direction: column; justify-content: flex-start; gap: 10px;
+  height: 100%; border-bottom: none; border-right: 1px solid var(--border);
+}
+.log-title-text {
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+  font-size: 15px; letter-spacing: 2px; text-transform: uppercase; color: var(--text);
+  white-space: nowrap; transition: all 0.3s ease;
+}
+.log-panel.collapsed .log-title-text {
+  writing-mode: vertical-rl; text-orientation: mixed;
+  transform: rotate(180deg); letter-spacing: 3px;
+  color: var(--muted); font-size: 11px;
+}
+.log-count-text {
+  font-family: 'Barlow Condensed', sans-serif; font-size: 12px;
+  color: var(--muted); letter-spacing: 1px; white-space: nowrap;
+}
+.log-panel.collapsed .log-count-text { display: none; }
+
+/* ══ PANEL SHARED ══ */
+.panel { display: flex; flex-direction: column; overflow: hidden; }
+.panel + .panel { border-left: 1px solid var(--border); }
+.panel-header {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 10px 14px; display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap; flex-shrink: 0;
+}
+.panel-title {
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+  font-size: 15px; letter-spacing: 2px; text-transform: uppercase; color: var(--text);
+}
+.panel-scroll { overflow-y: auto; flex: 1; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+
+/* ══ BOARD PANEL ══ */
+.filter-tabs { display: flex; gap: 3px; }
+.ftab {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 4px;
+  color: var(--muted); font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+  font-size: 11px; letter-spacing: 1px; padding: 4px 10px; cursor: pointer;
+  transition: all 0.15s; text-transform: uppercase;
+}
+.ftab.active-ALL  { background: var(--surface3); border-color: var(--text); color: var(--text); }
+.ftab.active-QB   { background: rgba(255,107,53,.2); border-color: var(--qb); color: var(--qb); }
+.ftab.active-RB   { background: rgba(34,197,94,.2);  border-color: var(--rb); color: var(--rb); }
+.ftab.active-WR   { background: rgba(0,212,255,.2);  border-color: var(--wr); color: var(--wr); }
+.ftab.active-TE   { background: rgba(168,85,247,.2); border-color: var(--te); color: var(--te); }
+.ftab.active-HIDE { background: rgba(239,68,68,.15); border-color: var(--red); color: var(--red); }
+.search-box {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text); font-size: 13px; padding: 5px 12px; outline: none;
+  width: 150px; margin-left: auto; transition: border-color 0.2s;
+  font-family: 'Barlow', sans-serif;
+}
+.search-box:focus { border-color: var(--accent); }
+.search-box::placeholder { color: var(--muted); }
+
+.tier-label {
+  background: linear-gradient(90deg, var(--surface3), transparent);
+  border-bottom: 1px solid var(--border); padding: 4px 16px;
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+  font-size: 10px; letter-spacing: 3px; text-transform: uppercase; color: var(--muted);
+  position: sticky; top: 0; z-index: 5;
+}
+
+.player-row {
+  display: grid; grid-template-columns: 40px 28px 1fr 52px 80px;
+  align-items: center; padding: 6px 14px; border-bottom: 1px solid rgba(36,52,82,.4);
+  gap: 8px; transition: background 0.1s; cursor: default;
+}
+.player-row:hover { background: var(--surface2); }
+.player-row.drafted { opacity: 0.28; }
+.player-row.drafted .pname { text-decoration: line-through; }
+.player-row.mine { background: rgba(245,158,11,.06); border-left: 3px solid var(--pick); padding-left: 11px; }
+.rank-num { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 15px; color: var(--muted); text-align: right; }
+.pos-badge {
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+  font-size: 10px; padding: 2px 5px; border-radius: 3px; text-align: center;
+}
+.pos-QB { background: rgba(255,107,53,.25); color: var(--qb); border: 1px solid rgba(255,107,53,.4); }
+.pos-RB { background: rgba(34,197,94,.25);  color: var(--rb); border: 1px solid rgba(34,197,94,.4); }
+.pos-WR { background: rgba(0,212,255,.25);  color: var(--wr); border: 1px solid rgba(0,212,255,.4); }
+.pos-TE { background: rgba(168,85,247,.25); color: var(--te); border: 1px solid rgba(168,85,247,.4); }
+.pname { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.psub  { font-size: 11px; color: var(--muted); }
+.pos-rank { font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 13px; color: var(--muted); text-align: center; }
+.action-cell { display: flex; gap: 4px; }
+.mark-btn {
+  background: transparent; border: 1px solid var(--border); border-radius: 4px;
+  color: var(--muted); font-size: 11px; padding: 3px 7px; cursor: pointer;
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 700; letter-spacing: .5px;
+  transition: all 0.15s;
+}
+.mark-btn:hover { border-color: var(--pick); color: var(--pick); background: rgba(245,158,11,.1); }
+.mark-btn.is-mine { border-color: var(--pick); color: var(--pick); background: rgba(245,158,11,.1); }
+.mark-btn.is-mine:hover { border-color: var(--muted); color: var(--muted); background: transparent; }
+.mark-drafted {
+  background: transparent; border: 1px solid var(--border); border-radius: 4px;
+  color: var(--muted); font-size: 10px; padding: 3px 6px; cursor: pointer;
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 700; transition: all 0.15s;
+}
+.mark-drafted:hover { border-color: var(--red); color: var(--red); background: rgba(239,68,68,.08); }
+.mark-drafted.is-drafted { border-color: rgba(239,68,68,.5); color: var(--red); background: rgba(239,68,68,.08); }
+
+/* ══ AVAILABLE / DRAFTED SPLIT ══ */
+.avail-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 14px; background: var(--surface2); border-bottom: 1px solid var(--border);
+  font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); flex-shrink: 0;
+}
+.avail-header span { color: var(--accent); }
+
+/* ══ ROSTER PANEL ══ */
+.pick-row {
+  display: grid; grid-template-columns: 26px 28px 1fr 44px;
+  align-items: center; padding: 7px 12px; border-bottom: 1px solid rgba(36,52,82,.4); gap: 8px;
+}
+.pick-num { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 13px; color: var(--pick); }
+.pick-name { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick-meta { font-size: 11px; color: var(--muted); }
+.remove-btn {
+  background: transparent; border: 1px solid transparent; border-radius: 4px;
+  color: var(--muted); font-size: 12px; padding: 2px 5px; cursor: pointer; transition: all 0.15s;
+}
+.remove-btn:hover { border-color: var(--red); color: var(--red); background: rgba(239,68,68,.08); }
+.picks-summary {
+  border-top: 1px solid var(--border); padding: 10px 12px;
+  background: var(--surface2); flex-shrink: 0;
+}
+.pos-counts { display: flex; gap: 6px; flex-wrap: wrap; }
+.count-badge { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 12px; padding: 3px 10px; border-radius: 4px; }
+.empty-picks { padding: 40px 20px; text-align: center; color: var(--muted); font-size: 13px; line-height: 2.2; }
+.empty-picks strong { color: var(--pick); }
+
+/* ══ DRAFT INFO BAR ══ */
+.draft-info-bar {
+  background: rgba(0,212,255,.05); border: 1px solid rgba(0,212,255,.2); border-radius: 6px;
+  padding: 4px 10px; font-size: 11px; color: var(--muted); display: none; white-space: nowrap;
+}
+.draft-info-bar strong { color: var(--accent); }
+.draft-info-bar.show { display: block; }
+
+/* ══ MODALS ══ */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 200; align-items: center; justify-content: center; }
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 24px; width: 560px; max-width: 95vw; max-height: 90vh;
+  display: flex; flex-direction: column;
+}
+.modal h2 { font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 18px; letter-spacing: 2px; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
+.modal p  { font-size: 13px; color: var(--muted); line-height: 1.7; margin-bottom: 10px; }
+.modal ol { padding-left: 20px; font-size: 13px; color: var(--muted); line-height: 2; margin-bottom: 12px; }
+.modal ol li strong { color: var(--text); }
+.modal-body { overflow-y: auto; flex: 1; }
+.modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+.modal-input {
+  width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text); font-family: 'Barlow', sans-serif; font-size: 13px;
+  padding: 8px 12px; outline: none; margin-bottom: 10px;
+}
+.modal-input:focus { border-color: var(--accent); }
+.modal-input::placeholder { color: var(--muted); }
+.modal-textarea {
+  width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text); font-family: monospace; font-size: 12px; padding: 10px;
+  height: 120px; resize: vertical; outline: none; margin-bottom: 10px;
+}
+.modal-textarea:focus { border-color: var(--accent); }
+.bookmarklet-link {
+  display: block; background: var(--bg); border: 1px dashed var(--accent);
+  border-radius: 6px; padding: 8px 12px; font-size: 11px; color: var(--accent);
+  word-break: break-all; text-decoration: none; margin-bottom: 12px; cursor: pointer;
+}
+.bookmarklet-link:hover { background: var(--surface2); }
+.search-result {
+  display: grid; grid-template-columns: 36px 28px 1fr 70px;
+  align-items: center; padding: 8px 4px;
+  border-bottom: 1px solid var(--border); gap: 8px; cursor: pointer;
+}
+.search-result:hover { background: var(--surface2); border-radius: 4px; }
+
+/* ══ TOAST ══ */
+.toast {
+  position: fixed; bottom: 20px; right: 20px; background: var(--surface3);
+  border: 1px solid var(--accent); border-radius: 8px; padding: 10px 18px;
+  font-size: 13px; z-index: 999; opacity: 0; transform: translateY(10px);
+  transition: all .25s; pointer-events: none; max-width: 320px;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+
+/* ══ LEAGUE ROSTERS DRAWER ══ */
+.rosters-drawer {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 90;
+  background: var(--surface);
+  border-top: 2px solid var(--accent);
+  box-shadow: 0 -4px 30px rgba(0,212,255,0.12);
+  transition: transform 0.3s cubic-bezier(.4,0,.2,1);
+  transform: translateY(calc(100% - 36px));
+}
+.rosters-drawer.open { transform: translateY(0); }
+
+.rosters-tab {
+  height: 36px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 16px; cursor: pointer; user-select: none;
+  background: linear-gradient(90deg, var(--surface2), var(--surface));
+}
+.rosters-tab:hover { background: var(--surface2); }
+.rosters-tab-left { display: flex; align-items: center; gap: 10px; }
+.rosters-tab-title {
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+  font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: var(--accent);
+}
+.rosters-tab-meta {
+  font-family: 'Barlow Condensed', sans-serif; font-size: 11px;
+  color: var(--muted); letter-spacing: 1px;
+}
+.rosters-chevron {
+  font-size: 12px; color: var(--muted); transition: transform 0.3s;
+}
+.rosters-drawer.open .rosters-chevron { transform: rotate(180deg); }
+
+.rosters-body {
+  height: 280px; overflow-y: auto; overflow-x: auto;
+  padding: 12px 16px 16px;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
+
+.rosters-grid {
+  display: flex; gap: 10px; min-width: max-content;
+}
+
+.team-card {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; min-width: 150px; flex-shrink: 0;
+  transition: border-color 0.15s;
+}
+.team-card:hover { border-color: var(--accent); }
+.team-card.is-mine { border-color: var(--pick); background: rgba(245,158,11,.06); }
+
+.team-name {
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+  font-size: 13px; letter-spacing: 1px; text-transform: uppercase;
+  color: var(--text); margin-bottom: 8px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.team-card.is-mine .team-name { color: var(--pick); }
+
+.team-pos-row {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 5px;
+}
+.team-pos-row:last-child { margin-bottom: 0; }
+
+.tpos-label {
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+  font-size: 10px; padding: 1px 5px; border-radius: 3px; width: 28px;
+  text-align: center; flex-shrink: 0;
+}
+.tpos-label.QB { background: rgba(255,107,53,.25); color: var(--qb); border: 1px solid rgba(255,107,53,.4); }
+.tpos-label.RB { background: rgba(34,197,94,.25);  color: var(--rb); border: 1px solid rgba(34,197,94,.4); }
+.tpos-label.WR { background: rgba(0,212,255,.25);  color: var(--wr); border: 1px solid rgba(0,212,255,.4); }
+.tpos-label.TE { background: rgba(168,85,247,.25); color: var(--te); border: 1px solid rgba(168,85,247,.4); }
+
+.tpos-pips { display: flex; gap: 3px; flex-wrap: wrap; }
+.pip {
+  width: 16px; height: 16px; border-radius: 3px; font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800; font-size: 9px; display: flex; align-items: center; justify-content: center;
+  cursor: default;
+}
+.pip.QB { background: rgba(255,107,53,.35); color: var(--qb); }
+.pip.RB { background: rgba(34,197,94,.35);  color: var(--rb); }
+.pip.WR { background: rgba(0,212,255,.35);  color: var(--wr); }
+.pip.TE { background: rgba(168,85,247,.35); color: var(--te); }
+
+.tpos-count {
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+  font-size: 13px; color: var(--text); margin-left: 2px;
+}
+
+.team-total {
+  margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border);
+  font-family: 'Barlow Condensed', sans-serif; font-size: 11px;
+  color: var(--muted); letter-spacing: 1px; text-align: right;
+}
+.team-total strong { color: var(--text); }
+
+.rosters-empty {
+  padding: 60px 20px; text-align: center; color: var(--muted); font-size: 13px; line-height: 2;
+}
+
+/* Shift main content up when drawer is open */
+.main { transition: height 0.3s cubic-bezier(.4,0,.2,1); }
+
+/* ══ UTILS ══ */
+.no-results { padding: 40px 20px; text-align: center; color: var(--muted); }
+::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+</style>
+</head>
+<body>
+
+<!-- ══ HEADER ══ -->
+<div class="header">
+  <div class="logo">KK HOLIDAY <span>DRAFT</span> ANNIHILATOR</div>
+  <div class="header-center">
+    <div class="stat-pill">Mar 26 Rankings</div>
+    <div class="stat-pill" id="hdr-drafted">Drafted: <strong>0</strong></div>
+    <div class="stat-pill" id="hdr-avail">Available: <strong>200</strong></div>
+  </div>
+  <div class="header-right">
+    <div class="live-pill" id="livePill">
+      <div class="live-dot" id="liveDot"></div>
+      <span class="live-label" id="liveLabel">Not connected</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ CONNECT BAR ══ -->
+<div class="connect-bar">
+  <div class="sleeper-badge">SLEEPER</div>
+  <div class="connect-field">
+    <label>Username</label>
+    <input class="connect-input" id="inUser" placeholder="your_sleeper_username" value="kkholiday" style="width:180px" autocomplete="off" autocapitalize="none">
+  </div>
+  <div class="connect-field">
+    <label>Draft ID</label>
+    <input class="connect-input" id="inDraft" placeholder="draft ID" value="1354197875130662912" style="width:200px">
+  </div>
+  <div class="connect-field">
+    <label>My Roster Slot #</label>
+    <input class="connect-input" id="inSlot" placeholder="e.g. 3" type="number" min="1" max="20" style="width:80px">
+  </div>
+  <div class="connect-actions">
+    <button class="btn purple" onclick="connectSleeper()">⚡ Connect</button>
+    <button class="btn outline sm" id="manualRefreshBtn" onclick="manualPoll()" title="Force refresh now" style="display:none">🔄 Refresh</button>
+    <button class="btn outline sm" onclick="openPasteModal()">📋 Paste Picks</button>
+    <button class="btn outline sm" onclick="openSetRosterModal()">📝 Set Roster</button>
+    <button class="btn danger sm" onclick="resetAll()">↺ Reset</button>
+    <button class="btn outline sm" onclick="document.getElementById('sheetFileInput').click()" title="Load .xlsx or .csv rankings">📂 Load Sheet</button>
+    <input type="file" id="sheetFileInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="loadRankingsFile(this)">
+  </div>
+  <div id="draftInfoBar" class="draft-info-bar"></div>
+</div>
+
+<!-- ══ MAIN 3-COL ══ -->
+<div class="main">
+
+  <!-- COL 1: AVAILABLE PLAYERS -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Board</div>
+      <div class="filter-tabs">
+        <button class="ftab active-ALL" data-pos="ALL" onclick="setFilter('ALL')">ALL</button>
+        <button class="ftab" data-pos="QB"  onclick="setFilter('QB')">QB</button>
+        <button class="ftab" data-pos="RB"  onclick="setFilter('RB')">RB</button>
+        <button class="ftab" data-pos="WR"  onclick="setFilter('WR')">WR</button>
+        <button class="ftab" data-pos="TE"  onclick="setFilter('TE')">TE</button>
+        <button class="ftab" id="hideBtn"   onclick="toggleHideDrafted()">Hide Drafted</button>
+      </div>
+      <input class="search-box" id="searchBox" placeholder="🔍 Search..." oninput="renderList()" autocomplete="off">
+    </div>
+    <div class="panel-scroll" id="playerList"></div>
+  </div>
+
+  <!-- COL 2: DRAFTED LOG (collapsible) -->
+  <div class="log-panel panel" id="logPanel">
+    <div class="log-panel-header" onclick="toggleDraftLog()">
+      <div class="log-title-text">Draft Log</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="log-count-text" id="draftLogCount">0 picks</span>
+        <button class="log-toggle-btn" id="logToggleBtn" title="Collapse draft log" onclick="event.stopPropagation();toggleDraftLog()">◀</button>
+      </div>
+    </div>
+    <div class="panel-scroll" id="draftLog">
+      <div class="empty-picks" style="color:var(--muted)">Connect to Sleeper or mark<br>players as drafted to see<br>the live draft log here</div>
+    </div>
+  </div>
+
+  <!-- COL 3: MY ROSTER -->
+  <div class="panel">
+    <div class="panel-header" style="justify-content:space-between">
+      <div class="panel-title">My Roster</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn sm" style="background:linear-gradient(135deg,var(--pick),#c47d00);color:#000" onclick="openSetRosterModal()">✎ Set</button>
+        <button class="btn outline sm" onclick="openAddModal()">+ Add</button>
+      </div>
+    </div>
+    <div class="panel-scroll" id="picksList">
+      <div class="empty-picks">Mark players as<br><strong>☆ Mine</strong> to build your roster<br><br>or connect Sleeper above</div>
+    </div>
+    <div class="picks-summary">
+      <div class="pos-counts" id="posCounts">
+        <span class="count-badge pos-QB">QB 0</span>
+        <span class="count-badge pos-RB">RB 0</span>
+        <span class="count-badge pos-WR">WR 0</span>
+        <span class="count-badge pos-TE">TE 0</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ LEAGUE ROSTERS DRAWER ══ -->
+<div class="rosters-drawer" id="rostersDrawer">
+  <div class="rosters-tab" onclick="toggleRostersDrawer()">
+    <div class="rosters-tab-left">
+      <span class="rosters-tab-title">📋 League Rosters</span>
+      <span class="rosters-tab-meta" id="rostersTabMeta">— connect to load teams —</span>
+    </div>
+    <span class="rosters-chevron">▲</span>
+  </div>
+  <div class="rosters-body" id="rostersBody">
+    <div class="rosters-empty">Connect to Sleeper to see all team rosters</div>
+  </div>
+</div>
+
+<!-- ══ MODAL: SET ROSTER ══ -->
+<div class="modal-overlay" id="setRosterModal">
+  <div class="modal" style="max-width:440px">
+    <h2>📝 Set My Team Manually</h2>
+    <p>One player name per line. Partial match works.</p>
+    <textarea class="modal-textarea" id="rosterInput" style="height:260px" placeholder="Josh Allen&#10;Lamar Jackson&#10;Nico Collins&#10;Chase Brown&#10;Sam LaPorta&#10;..."></textarea>
+    <div class="modal-footer">
+      <button class="btn purple" onclick="applyManualRoster()">✅ Apply</button>
+      <button class="btn outline" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: PASTE PICKS ══ -->
+<div class="modal-overlay" id="pasteModal">
+  <div class="modal">
+    <h2>📋 Import from Sleeper</h2>
+    <p>Use this bookmarklet on your Sleeper draft page to copy picks, then paste below:</p>
+    <ol>
+      <li>Drag to bookmarks bar: <a class="bookmarklet-link" id="bookmarkletLink" href="#">📋 Copy Sleeper Picks</a></li>
+      <li>Open your <strong>Sleeper draft</strong> page</li>
+      <li>Click the bookmarklet — copies picks to clipboard</li>
+      <li>Paste below</li>
+    </ol>
+    <p><strong style="color:var(--text)">Or paste raw JSON from:</strong> <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;color:var(--yellow);font-size:11px">api.sleeper.app/v1/draft/DRAFT_ID/picks</code></p>
+    <div class="modal-body">
+      <textarea class="modal-textarea" id="pasteArea" placeholder='Paste picks JSON here...' style="margin-top:10px"></textarea>
+      <p style="margin-bottom:6px;font-size:12px">Your Sleeper username (to identify your picks):</p>
+      <div style="display:flex;gap:8px">
+        <input class="modal-input" id="pasteUsername" placeholder="your_sleeper_username" style="max-width:220px;margin-bottom:0" autocapitalize="none">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn purple" onclick="importPastedPicks()">Import</button>
+      <button class="btn outline" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: ADD PLAYER ══ -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal" style="max-width:420px">
+    <h2>➕ Add My Pick</h2>
+    <p>Search and add a player to your roster:</p>
+    <input class="modal-input" id="addSearch" placeholder="Type player name..." oninput="renderAddResults()" autocomplete="off">
+    <div class="modal-body" id="addResults" style="max-height:260px"></div>
+    <div class="modal-footer">
+      <button class="btn outline" onclick="closeModal()">Done</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── BOOKMARKLET ──
+const BOOKMARKLET = `javascript:(function(){
+  var id = location.pathname.match(/draft[\\/%2F]+([0-9]+)/);
+  if(!id){alert('Open on your Sleeper draft page');return;}
+  fetch('https://api.sleeper.app/v1/draft/'+id[1]+'/picks')
+    .then(r=>r.json()).then(d=>{
+      navigator.clipboard.writeText(JSON.stringify(d))
+        .then(()=>alert('✅ '+d.length+' picks copied!'))
+        .catch(()=>{prompt('Copy this:',JSON.stringify(d));});
+    }).catch(e=>alert('Error: '+e));
+})();`;
+document.getElementById('bookmarkletLink').href = BOOKMARKLET;
+
+// ── PLAYER DATA ──
+let PLAYERS = [{"Overall":1,"Player":"Josh Allen","Position":"QB","Positional Rank":1,"Tier":1,"Age":29.8},{"Overall":2,"Player":"Drake Maye","Position":"QB","Positional Rank":2,"Tier":1,"Age":23.5},{"Overall":3,"Player":"Ja'Marr Chase","Position":"WR","Positional Rank":1,"Tier":2,"Age":26.0},{"Overall":4,"Player":"Jaxon Smith-Njigba","Position":"WR","Positional Rank":2,"Tier":2,"Age":24.1},{"Overall":5,"Player":"Bijan Robinson","Position":"RB","Positional Rank":1,"Tier":2,"Age":24.1},{"Overall":6,"Player":"Lamar Jackson","Position":"QB","Positional Rank":3,"Tier":2,"Age":29.2},{"Overall":7,"Player":"Puka Nacua","Position":"WR","Positional Rank":3,"Tier":2,"Age":24.8},{"Overall":8,"Player":"Jahmyr Gibbs","Position":"RB","Positional Rank":2,"Tier":2,"Age":24.0},{"Overall":9,"Player":"Jayden Daniels","Position":"QB","Positional Rank":4,"Tier":2,"Age":25.2},{"Overall":10,"Player":"Malik Nabers","Position":"WR","Positional Rank":4,"Tier":3,"Age":22.6},{"Overall":11,"Player":"Amon-Ra St. Brown","Position":"WR","Positional Rank":5,"Tier":3,"Age":26.4},{"Overall":12,"Player":"CeeDee Lamb","Position":"WR","Positional Rank":6,"Tier":3,"Age":26.9},{"Overall":13,"Player":"Justin Jefferson","Position":"WR","Positional Rank":7,"Tier":3,"Age":26.7},{"Overall":14,"Player":"Joe Burrow","Position":"QB","Positional Rank":5,"Tier":3,"Age":29.3},{"Overall":15,"Player":"Patrick Mahomes","Position":"QB","Positional Rank":6,"Tier":3,"Age":30.5},{"Overall":16,"Player":"Justin Herbert","Position":"QB","Positional Rank":7,"Tier":3,"Age":28.0},{"Overall":17,"Player":"Ashton Jeanty","Position":"RB","Positional Rank":3,"Tier":3,"Age":22.3},{"Overall":18,"Player":"Caleb Williams","Position":"QB","Positional Rank":8,"Tier":3,"Age":24.3},{"Overall":19,"Player":"Brock Bowers","Position":"TE","Positional Rank":1,"Tier":3,"Age":23.2},{"Overall":20,"Player":"Drake London","Position":"WR","Positional Rank":8,"Tier":4,"Age":24.6},{"Overall":21,"Player":"Jaxson Dart","Position":"QB","Positional Rank":9,"Tier":4,"Age":22.8},{"Overall":22,"Player":"Omarion Hampton","Position":"RB","Positional Rank":4,"Tier":4,"Age":23.0},{"Overall":23,"Player":"Trey McBride","Position":"TE","Positional Rank":2,"Tier":4,"Age":26.3},{"Overall":24,"Player":"De'Von Achane","Position":"RB","Positional Rank":5,"Tier":4,"Age":24.4},{"Overall":25,"Player":"Tetairoa McMillan","Position":"WR","Positional Rank":9,"Tier":5,"Age":22.9},{"Overall":26,"Player":"Jalen Hurts","Position":"QB","Positional Rank":10,"Tier":5,"Age":27.6},{"Overall":27,"Player":"Trevor Lawrence","Position":"QB","Positional Rank":11,"Tier":5,"Age":26.4},{"Overall":28,"Player":"Jordan Love","Position":"QB","Positional Rank":12,"Tier":5,"Age":27.4},{"Overall":29,"Player":"Bo Nix","Position":"QB","Positional Rank":13,"Tier":5,"Age":26.0},{"Overall":30,"Player":"Brock Purdy","Position":"QB","Positional Rank":14,"Tier":5,"Age":26.2},{"Overall":31,"Player":"George Pickens","Position":"WR","Positional Rank":10,"Tier":5,"Age":25.0},{"Overall":32,"Player":"James Cook","Position":"RB","Positional Rank":6,"Tier":5,"Age":26.5},{"Overall":33,"Player":"Jonathan Taylor","Position":"RB","Positional Rank":7,"Tier":5,"Age":27.1},{"Overall":34,"Player":"Nico Collins","Position":"WR","Positional Rank":11,"Tier":5,"Age":27.0},{"Overall":35,"Player":"Emeka Egbuka","Position":"WR","Positional Rank":12,"Tier":5,"Age":23.4},{"Overall":36,"Player":"Dak Prescott","Position":"QB","Positional Rank":15,"Tier":5,"Age":32.6},{"Overall":37,"Player":"Ladd McConkey","Position":"WR","Positional Rank":13,"Tier":6,"Age":24.3},{"Overall":38,"Player":"Garrett Wilson","Position":"WR","Positional Rank":14,"Tier":6,"Age":25.6},{"Overall":39,"Player":"Chris Olave","Position":"WR","Positional Rank":15,"Tier":6,"Age":25.7},{"Overall":40,"Player":"Baker Mayfield","Position":"QB","Positional Rank":16,"Tier":6,"Age":30.9},{"Overall":41,"Player":"TreVeyon Henderson","Position":"RB","Positional Rank":8,"Tier":6,"Age":23.4},{"Overall":42,"Player":"Luther Burden","Position":"WR","Positional Rank":16,"Tier":6,"Age":22.2},{"Overall":43,"Player":"Colston Loveland","Position":"TE","Positional Rank":3,"Tier":6,"Age":21.9},{"Overall":44,"Player":"CJ Stroud","Position":"QB","Positional Rank":17,"Tier":6,"Age":24.4},{"Overall":45,"Player":"Kenneth Walker","Position":"RB","Positional Rank":9,"Tier":7,"Age":25.4},{"Overall":46,"Player":"Quinshon Judkins","Position":"RB","Positional Rank":10,"Tier":7,"Age":22.3},{"Overall":47,"Player":"Rome Odunze","Position":"WR","Positional Rank":17,"Tier":7,"Age":23.8},{"Overall":48,"Player":"Tee Higgins","Position":"WR","Positional Rank":18,"Tier":7,"Age":27.2},{"Overall":49,"Player":"Tyler Warren","Position":"TE","Positional Rank":4,"Tier":7,"Age":23.8},{"Overall":50,"Player":"Breece Hall","Position":"RB","Positional Rank":11,"Tier":8,"Age":24.8},{"Overall":51,"Player":"Marvin Harrison","Position":"WR","Positional Rank":19,"Tier":8,"Age":23.6},{"Overall":52,"Player":"Christian McCaffrey","Position":"RB","Positional Rank":12,"Tier":8,"Age":29.8},{"Overall":53,"Player":"Bucky Irving","Position":"RB","Positional Rank":13,"Tier":8,"Age":23.5},{"Overall":54,"Player":"Rashee Rice","Position":"WR","Positional Rank":20,"Tier":8,"Age":25.9},{"Overall":55,"Player":"Brian Thomas","Position":"WR","Positional Rank":21,"Tier":8,"Age":23.4},{"Overall":56,"Player":"Sam Darnold","Position":"QB","Positional Rank":18,"Tier":8,"Age":28.8},{"Overall":57,"Player":"Jared Goff","Position":"QB","Positional Rank":19,"Tier":8,"Age":31.4},{"Overall":58,"Player":"Cam Ward","Position":"QB","Positional Rank":20,"Tier":8,"Age":23.8},{"Overall":59,"Player":"Chase Brown","Position":"RB","Positional Rank":14,"Tier":8,"Age":26.0},{"Overall":60,"Player":"Kyren Williams","Position":"RB","Positional Rank":15,"Tier":8,"Age":25.5},{"Overall":61,"Player":"DeVonta Smith","Position":"WR","Positional Rank":22,"Tier":8,"Age":27.3},{"Overall":62,"Player":"Harold Fannin","Position":"TE","Positional Rank":5,"Tier":8,"Age":21.6},{"Overall":63,"Player":"Zay Flowers","Position":"WR","Positional Rank":23,"Tier":8,"Age":25.5},{"Overall":64,"Player":"Saquon Barkley","Position":"RB","Positional Rank":16,"Tier":8,"Age":29.1},{"Overall":65,"Player":"Jameson Williams","Position":"WR","Positional Rank":24,"Tier":9,"Age":25.0},{"Overall":66,"Player":"Josh Jacobs","Position":"RB","Positional Rank":17,"Tier":9,"Age":28.1},{"Overall":67,"Player":"Jaylen Waddle","Position":"WR","Positional Rank":25,"Tier":9,"Age":27.3},{"Overall":68,"Player":"AJ Brown","Position":"WR","Positional Rank":26,"Tier":9,"Age":28.7},{"Overall":69,"Player":"Tucker Kraft","Position":"TE","Positional Rank":6,"Tier":10,"Age":25.4},{"Overall":70,"Player":"Cam Skattebo","Position":"RB","Positional Rank":18,"Tier":10,"Age":24.1},{"Overall":71,"Player":"Jordan Addison","Position":"WR","Positional Rank":27,"Tier":10,"Age":24.1},{"Overall":72,"Player":"Travis Etienne","Position":"RB","Positional Rank":19,"Tier":10,"Age":27.1},{"Overall":73,"Player":"Malik Willis","Position":"QB","Positional Rank":21,"Tier":10,"Age":26.8},{"Overall":74,"Player":"Tyler Shough","Position":"QB","Positional Rank":22,"Tier":10,"Age":26.5},{"Overall":75,"Player":"Kyler Murray","Position":"QB","Positional Rank":23,"Tier":10,"Age":28.5},{"Overall":76,"Player":"Daniel Jones","Position":"QB","Positional Rank":24,"Tier":10,"Age":28.8},{"Overall":77,"Player":"Bryce Young","Position":"QB","Positional Rank":25,"Tier":10,"Age":24.6},{"Overall":78,"Player":"Christian Watson","Position":"WR","Positional Rank":28,"Tier":10,"Age":26.8},{"Overall":79,"Player":"Bhayshul Tuten","Position":"RB","Positional Rank":20,"Tier":11,"Age":23.1},{"Overall":80,"Player":"Javonte Williams","Position":"RB","Positional Rank":21,"Tier":11,"Age":25.9},{"Overall":81,"Player":"RJ Harvey","Position":"RB","Positional Rank":22,"Tier":11,"Age":25.1},{"Overall":82,"Player":"Sam LaPorta","Position":"TE","Positional Rank":7,"Tier":11,"Age":25.2},{"Overall":83,"Player":"Matthew Stafford","Position":"QB","Positional Rank":26,"Tier":11,"Age":38.1},{"Overall":84,"Player":"Kyle Pitts","Position":"TE","Positional Rank":8,"Tier":11,"Age":25.4},{"Overall":85,"Player":"DJ Moore","Position":"WR","Positional Rank":29,"Tier":12,"Age":28.9},{"Overall":86,"Player":"Alec Pierce","Position":"WR","Positional Rank":30,"Tier":12,"Age":25.9},{"Overall":87,"Player":"Ricky Pearsall","Position":"WR","Positional Rank":31,"Tier":12,"Age":25.5},{"Overall":88,"Player":"Oronde Gadsden","Position":"TE","Positional Rank":9,"Tier":12,"Age":22.7},{"Overall":89,"Player":"Travis Hunter","Position":"WR","Positional Rank":32,"Tier":13,"Age":22.8},{"Overall":90,"Player":"Jayden Higgins","Position":"WR","Positional Rank":33,"Tier":13,"Age":23.2},{"Overall":91,"Player":"Derrick Henry","Position":"RB","Positional Rank":23,"Tier":13,"Age":32.2},{"Overall":92,"Player":"Zach Charbonnet","Position":"RB","Positional Rank":24,"Tier":14,"Age":25.2},{"Overall":93,"Player":"DK Metcalf","Position":"WR","Positional Rank":34,"Tier":14,"Age":28.2},{"Overall":94,"Player":"Michael Wilson","Position":"WR","Positional Rank":35,"Tier":14,"Age":26.1},{"Overall":95,"Player":"Parker Washington","Position":"WR","Positional Rank":36,"Tier":14,"Age":24.0},{"Overall":96,"Player":"Davante Adams","Position":"WR","Positional Rank":37,"Tier":14,"Age":33.2},{"Overall":97,"Player":"Kyle Monangai","Position":"RB","Positional Rank":25,"Tier":14,"Age":24.0},{"Overall":98,"Player":"Wan'Dale Robinson","Position":"WR","Positional Rank":38,"Tier":14,"Age":25.2},{"Overall":99,"Player":"Jayden Reed","Position":"WR","Positional Rank":39,"Tier":14,"Age":25.9},{"Overall":100,"Player":"Quentin Johnston","Position":"WR","Positional Rank":40,"Tier":15,"Age":24.5},{"Overall":101,"Player":"Matthew Golden","Position":"WR","Positional Rank":41,"Tier":15,"Age":22.6},{"Overall":102,"Player":"D'Andre Swift","Position":"RB","Positional Rank":26,"Tier":15,"Age":27.2},{"Overall":103,"Player":"Xavier Worthy","Position":"WR","Positional Rank":42,"Tier":15,"Age":22.9},{"Overall":104,"Player":"Terry McLaurin","Position":"WR","Positional Rank":43,"Tier":15,"Age":30.5},{"Overall":105,"Player":"JJ McCarthy","Position":"QB","Positional Rank":27,"Tier":15,"Age":23.1},{"Overall":106,"Player":"Michael Penix","Position":"QB","Positional Rank":28,"Tier":15,"Age":25.8},{"Overall":107,"Player":"Tua Tagovailoa","Position":"QB","Positional Rank":29,"Tier":15,"Age":28.0},{"Overall":108,"Player":"Romeo Doubs","Position":"WR","Positional Rank":44,"Tier":15,"Age":25.9},{"Overall":109,"Player":"Blake Corum","Position":"RB","Positional Rank":27,"Tier":15,"Age":25.3},{"Overall":110,"Player":"Josh Downs","Position":"WR","Positional Rank":45,"Tier":15,"Age":24.6},{"Overall":111,"Player":"Jalen Coker","Position":"WR","Positional Rank":46,"Tier":15,"Age":24.4},{"Overall":112,"Player":"Jaylen Warren","Position":"RB","Positional Rank":28,"Tier":15,"Age":27.4},{"Overall":113,"Player":"Jakobi Meyers","Position":"WR","Positional Rank":47,"Tier":15,"Age":29.3},{"Overall":114,"Player":"Courtland Sutton","Position":"WR","Positional Rank":48,"Tier":15,"Age":30.4},{"Overall":115,"Player":"Dalton Kincaid","Position":"TE","Positional Rank":10,"Tier":16,"Age":26.4},{"Overall":116,"Player":"Michael Pittman","Position":"WR","Positional Rank":49,"Tier":16,"Age":28.4},{"Overall":117,"Player":"Khalil Shakir","Position":"WR","Positional Rank":50,"Tier":16,"Age":26.1},{"Overall":118,"Player":"Rico Dowdle","Position":"RB","Positional Rank":29,"Tier":16,"Age":27.7},{"Overall":119,"Player":"Jake Ferguson","Position":"TE","Positional Rank":11,"Tier":16,"Age":27.2},{"Overall":120,"Player":"Mike Evans","Position":"WR","Positional Rank":51,"Tier":16,"Age":32.6},{"Overall":121,"Player":"Pat Bryant","Position":"WR","Positional Rank":52,"Tier":17,"Age":23.3},{"Overall":122,"Player":"Troy Franklin","Position":"WR","Positional Rank":53,"Tier":17,"Age":23.1},{"Overall":123,"Player":"Kenneth Gainwell","Position":"RB","Positional Rank":30,"Tier":17,"Age":27.0},{"Overall":124,"Player":"Rhamondre Stevenson","Position":"RB","Positional Rank":31,"Tier":17,"Age":28.1},{"Overall":125,"Player":"Tyrone Tracy","Position":"RB","Positional Rank":32,"Tier":17,"Age":26.3},{"Overall":126,"Player":"David Montgomery","Position":"RB","Positional Rank":33,"Tier":17,"Age":28.8},{"Overall":127,"Player":"Shedeur Sanders","Position":"QB","Positional Rank":30,"Tier":17,"Age":24.1},{"Overall":128,"Player":"Jacoby Brissett","Position":"QB","Positional Rank":31,"Tier":17,"Age":33.3},{"Overall":129,"Player":"Geno Smith","Position":"QB","Positional Rank":32,"Tier":17,"Age":35.4},{"Overall":130,"Player":"Jaylin Noel","Position":"WR","Positional Rank":54,"Tier":17,"Age":23.5},{"Overall":131,"Player":"Isaac TeSlaa","Position":"WR","Positional Rank":55,"Tier":17,"Age":23.8},{"Overall":132,"Player":"Brenton Strange","Position":"TE","Positional Rank":12,"Tier":17,"Age":25.2},{"Overall":133,"Player":"Kayshon Boutte","Position":"WR","Positional Rank":56,"Tier":17,"Age":23.8},{"Overall":134,"Player":"George Kittle","Position":"TE","Positional Rank":13,"Tier":17,"Age":32.4},{"Overall":135,"Player":"Tyler Allgeier","Position":"RB","Positional Rank":34,"Tier":17,"Age":25.9},{"Overall":136,"Player":"Elic Ayomanor","Position":"WR","Positional Rank":57,"Tier":17,"Age":22.7},{"Overall":137,"Player":"Jacory Croskey-Merritt","Position":"RB","Positional Rank":35,"Tier":17,"Age":24.9},{"Overall":138,"Player":"Terrance Ferguson","Position":"TE","Positional Rank":14,"Tier":17,"Age":23.1},{"Overall":139,"Player":"Isaiah Likely","Position":"TE","Positional Rank":15,"Tier":17,"Age":25.9},{"Overall":140,"Player":"Justin Fields","Position":"QB","Positional Rank":33,"Tier":18,"Age":27.0},{"Overall":141,"Player":"Anthony Richardson","Position":"QB","Positional Rank":34,"Tier":18,"Age":23.8},{"Overall":142,"Player":"Chuba Hubbard","Position":"RB","Positional Rank":36,"Tier":18,"Age":26.8},{"Overall":143,"Player":"Dylan Sampson","Position":"RB","Positional Rank":37,"Tier":18,"Age":21.5},{"Overall":144,"Player":"Jalen McMillan","Position":"WR","Positional Rank":58,"Tier":18,"Age":24.3},{"Overall":145,"Player":"Jonathon Brooks","Position":"RB","Positional Rank":38,"Tier":18,"Age":22.6},{"Overall":146,"Player":"Woody Marks","Position":"RB","Positional Rank":39,"Tier":18,"Age":25.2},{"Overall":147,"Player":"Tre Harris","Position":"WR","Positional Rank":59,"Tier":19,"Age":24.0},{"Overall":148,"Player":"Jauan Jennings","Position":"WR","Positional Rank":60,"Tier":19,"Age":28.7},{"Overall":149,"Player":"Rashid Shaheed","Position":"WR","Positional Rank":61,"Tier":19,"Age":27.5},{"Overall":150,"Player":"Chris Godwin","Position":"WR","Positional Rank":62,"Tier":19,"Age":30.0},{"Overall":151,"Player":"Adonai Mitchell","Position":"WR","Positional Rank":63,"Tier":20,"Age":23.4},{"Overall":152,"Player":"JK Dobbins","Position":"RB","Positional Rank":40,"Tier":20,"Age":27.2},{"Overall":153,"Player":"Rachaad White","Position":"RB","Positional Rank":41,"Tier":20,"Age":27.2},{"Overall":154,"Player":"Trey Benson","Position":"RB","Positional Rank":42,"Tier":20,"Age":23.6},{"Overall":155,"Player":"Tyjae Spears","Position":"RB","Positional Rank":43,"Tier":20,"Age":24.7},{"Overall":156,"Player":"Keaton Mitchell","Position":"RB","Positional Rank":44,"Tier":20,"Age":24.2},{"Overall":157,"Player":"Braelon Allen","Position":"RB","Positional Rank":45,"Tier":21,"Age":22.1},{"Overall":158,"Player":"Chris Rodriguez","Position":"RB","Positional Rank":46,"Tier":21,"Age":26.5},{"Overall":159,"Player":"Mac Jones","Position":"QB","Positional Rank":35,"Tier":21,"Age":27.5},{"Overall":160,"Player":"Jordan Mason","Position":"RB","Positional Rank":47,"Tier":21,"Age":26.8},{"Overall":161,"Player":"Kimani Vidal","Position":"RB","Positional Rank":48,"Tier":21,"Age":24.5},{"Overall":162,"Player":"Mason Taylor","Position":"TE","Positional Rank":16,"Tier":21,"Age":21.8},{"Overall":163,"Player":"Sean Tucker","Position":"RB","Positional Rank":49,"Tier":21,"Age":24.4},{"Overall":164,"Player":"Brandon Aiyuk","Position":"WR","Positional Rank":64,"Tier":21,"Age":28.0},{"Overall":165,"Player":"Jerry Jeudy","Position":"WR","Positional Rank":65,"Tier":22,"Age":26.9},{"Overall":166,"Player":"Kyle Williams","Position":"WR","Positional Rank":66,"Tier":22,"Age":23.7},{"Overall":167,"Player":"Tory Horton","Position":"WR","Positional Rank":67,"Tier":22,"Age":23.3},{"Overall":168,"Player":"Aaron Rodgers","Position":"QB","Positional Rank":36,"Tier":22,"Age":43.1},{"Overall":169,"Player":"Will Howard","Position":"QB","Positional Rank":37,"Tier":22,"Age":24.5},{"Overall":170,"Player":"Chimere Dike","Position":"WR","Positional Rank":68,"Tier":22,"Age":23.6},{"Overall":171,"Player":"Tony Pollard","Position":"RB","Positional Rank":50,"Tier":22,"Age":28.9},{"Overall":172,"Player":"Devin Neal","Position":"RB","Positional Rank":51,"Tier":22,"Age":22.6},{"Overall":173,"Player":"Brian Robinson","Position":"RB","Positional Rank":52,"Tier":22,"Age":27.0},{"Overall":174,"Player":"Jack Bech","Position":"WR","Positional Rank":69,"Tier":22,"Age":23.2},{"Overall":175,"Player":"Tank Dell","Position":"WR","Positional Rank":70,"Tier":22,"Age":26.4},{"Overall":176,"Player":"Kaleb Johnson","Position":"RB","Positional Rank":53,"Tier":22,"Age":22.6},{"Overall":177,"Player":"Stefon Diggs","Position":"WR","Positional Rank":71,"Tier":22,"Age":32.3},{"Overall":178,"Player":"Deebo Samuel","Position":"WR","Positional Rank":72,"Tier":22,"Age":30.2},{"Overall":179,"Player":"Ollie Gordon","Position":"RB","Positional Rank":54,"Tier":23,"Age":22.2},{"Overall":180,"Player":"AJ Barner","Position":"TE","Positional Rank":17,"Tier":23,"Age":23.9},{"Overall":181,"Player":"TJ Hockenson","Position":"TE","Positional Rank":18,"Tier":23,"Age":28.7},{"Overall":182,"Player":"Tez Johnson","Position":"WR","Positional Rank":73,"Tier":23,"Age":23.8},{"Overall":183,"Player":"Keon Coleman","Position":"WR","Positional Rank":74,"Tier":23,"Age":22.8},{"Overall":184,"Player":"Kirk Cousins","Position":"QB","Positional Rank":38,"Tier":23,"Age":37.6},{"Overall":185,"Player":"Marcus Mariota","Position":"QB","Positional Rank":39,"Tier":23,"Age":32.4},{"Overall":186,"Player":"Spencer Rattler","Position":"QB","Positional Rank":40,"Tier":23,"Age":25.5},{"Overall":187,"Player":"Gardner Minshew","Position":"QB","Positional Rank":41,"Tier":23,"Age":29.8},{"Overall":188,"Player":"Dallas Goedert","Position":"TE","Positional Rank":19,"Tier":24,"Age":31.2},{"Overall":189,"Player":"Theo Johnson","Position":"TE","Positional Rank":20,"Tier":24,"Age":25.0},{"Overall":190,"Player":"Elijah Arroyo","Position":"TE","Positional Rank":21,"Tier":24,"Age":22.9},{"Overall":191,"Player":"Tank Bigsby","Position":"RB","Positional Rank":55,"Tier":24,"Age":24.5},{"Overall":192,"Player":"Isaiah Bond","Position":"WR","Positional Rank":75,"Tier":24,"Age":22.0},{"Overall":193,"Player":"Quinn Ewers","Position":"QB","Positional Rank":42,"Tier":24,"Age":23.0},{"Overall":194,"Player":"Darnell Mooney","Position":"WR","Positional Rank":76,"Tier":24,"Age":28.4},{"Overall":195,"Player":"Tre Tucker","Position":"WR","Positional Rank":77,"Tier":24,"Age":25.0},{"Overall":196,"Player":"Marvin Mims","Position":"WR","Positional Rank":78,"Tier":25,"Age":24.0},{"Overall":197,"Player":"Cedric Tillman","Position":"WR","Positional Rank":79,"Tier":25,"Age":25.9},{"Overall":198,"Player":"Emanuel Wilson","Position":"RB","Positional Rank":56,"Tier":25,"Age":26.8},{"Overall":199,"Player":"Chig Okonkwo","Position":"TE","Positional Rank":22,"Tier":25,"Age":26.5},{"Overall":200,"Player":"Mark Andrews","Position":"TE","Positional Rank":23,"Tier":25,"Age":30.5}];
+
+
+// ── LOAD RANKINGS FROM FILE ──
+function loadRankingsFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const isCsv = file.name.toLowerCase().endsWith(".csv");
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      let rows;
+      const wb = XLSX.read(e.target.result, { type: isCsv ? "string" : "binary" });
+      // Find the first sheet that has a Player/Name column (skips Read Me tabs etc.)
+      let dataSheet = null;
+      for (const name of wb.SheetNames) {
+        const preview = XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: "", header: 1 });
+        if (preview.length > 1) {
+          const hdrs = preview[0].map(h => String(h).trim().toLowerCase());
+          if (hdrs.includes("player") || hdrs.includes("name")) { dataSheet = wb.Sheets[name]; break; }
+        }
+      }
+      if (!dataSheet) { alert("Could not find a sheet with a Player or Name column."); input.value=""; return; }
+      rows = XLSX.utils.sheet_to_json(dataSheet, { defval: "" });
+      // Flexible column key finder
+      function col(row, ...keys) {
+        for (const k of keys) {
+          for (const rk of Object.keys(row)) {
+            if (rk.trim().toLowerCase() === k.toLowerCase()) return row[rk];
+          }
+        }
+        return "";
+      }
+      const parsed = rows
+        .filter(r => col(r,"Player","Name") && col(r,"Position","Pos"))
+        .map((r, i) => ({
+          Overall:          parseInt(col(r,"Overall","Rank","Overall Rank","#")) || i + 1,
+          Player:           String(col(r,"Player","Name")).trim(),
+          Position:         String(col(r,"Position","Pos")).trim().toUpperCase(),
+          "Positional Rank": parseInt(col(r,"Positional Rank","Pos Rank","PosRank")) || 0,
+          Tier:             parseInt(col(r,"Tier","Tier Group")) || 1,
+          Age:              parseFloat(col(r,"Age")) || 0
+        }))
+        .sort((a,b) => a.Overall - b.Overall);
+      if (parsed.length < 5) { alert("Could not parse rankings — check column names:\nOverall, Player, Position, Positional Rank, Tier, Age"); input.value=""; return; }
+      PLAYERS = parsed;
+      // Clear stale localStorage IDs — they belong to the old player list
+      draftedSet.clear();
+      myPickIds.clear();
+      save();
+      showToast("📂 Loaded " + parsed.length + " players from " + file.name);
+      // Re-apply any cached Sleeper picks against the new player list
+      if (_rawPicksCache && _rawPicksCache.length > 0) {
+        updateDraftedFromPicks(_rawPicksCache, true);
+      } else {
+        renderList();
+        renderRoster();
+      }
+    } catch(err) {
+      alert("File error: " + err.message);
+    }
+    input.value = "";
+  };
+  if (isCsv) reader.readAsText(file);
+  else reader.readAsBinaryString(file);
+}
+
+// ── STATE ──
+// Migrate: clear old integer-ID localStorage (now using normName string keys)
+(function() {
+  const old = JSON.parse(localStorage.getItem('sf_drafted') || '[]');
+  if (old.length && typeof old[0] === 'number') { localStorage.removeItem('sf_drafted'); localStorage.removeItem('sf_mypicks'); }
+})();
+let draftedSet = new Set(JSON.parse(localStorage.getItem('sf_drafted') || '[]'));
+let myPickIds  = new Set(JSON.parse(localStorage.getItem('sf_mypicks') || '[]'));
+let currentFilter = 'ALL';
+let hideDrafted = localStorage.getItem('sf_hideDrafted') === 'true';
+let draftLogEntries = [];
+let _rawPicksCache = []; // cache of full Sleeper pick objects // chronological list of picks from Sleeper
+
+function save() {
+  localStorage.setItem('sf_drafted', JSON.stringify([...draftedSet]));
+  localStorage.setItem('sf_mypicks',  JSON.stringify([...myPickIds]));
+}
+
+// ── RENDER BOARD ──
+function renderList() {
+  const search = (document.getElementById('searchBox').value || '').toLowerCase().trim();
+  const list = document.getElementById('playerList');
+  let html = '', lastTier = null, shown = 0;
+
+  for (const p of PLAYERS) {
+    if (currentFilter !== 'ALL' && p.Position !== currentFilter) continue;
+    if (search && !p.Player.toLowerCase().includes(search)) continue;
+    if (hideDrafted && draftedSet.has(normName(p.Player))) continue;
+    shown++;
+
+    if (p.Tier !== lastTier) {
+      lastTier = p.Tier;
+      html += `<div class="tier-label">— Tier ${p.Tier} —</div>`;
+    }
+
+    const drafted = draftedSet.has(normName(p.Player));
+    const mine    = myPickIds.has(p.Overall);
+    let cls = 'player-row';
+    if (drafted) cls += ' drafted';
+    else if (mine) cls += ' mine';
+
+    html += `<div class="${cls}" id="row-${p.Overall}">
+      <div class="rank-num">${p.Overall}</div>
+      <div class="pos-badge pos-${p.Position}">${p.Position}</div>
+      <div>
+        <div class="pname">${p.Player}</div>
+        <div class="psub">Age ${Number(p.Age).toFixed(1)}</div>
+      </div>
+      <div class="pos-rank">${p.Position}${p['Positional Rank']}</div>
+      <div class="action-cell">
+        <button class="mark-btn ${mine ? 'is-mine' : ''}" onclick="toggleMine('${normName(p.Player)}')">${mine ? '★ Mine' : '☆ Mine'}</button>
+        <button class="mark-drafted ${drafted ? 'is-drafted' : ''}" onclick="toggleDrafted('${normName(p.Player)}')">✕</button>
+      </div>
+    </div>`;
+  }
+
+  if (!shown) html = `<div class="no-results">No players found</div>`;
+  list.innerHTML = html;
+  updateCounts();
+}
+
+function updateCounts() {
+  document.getElementById('hdr-drafted').innerHTML = `Drafted: <strong>${draftedSet.size}</strong>`;
+  document.getElementById('hdr-avail').innerHTML   = `Available: <strong>${200 - draftedSet.size}</strong>`;
+}
+
+// ── RENDER DRAFT LOG ──
+function renderDraftLog() {
+  const log = document.getElementById('draftLog');
+  const countEl = document.getElementById('draftLogCount');
+
+  // Build from draftedSet cross-referenced with PLAYERS, in pick order from draftLogEntries
+  const entriesHtml = draftLogEntries.map((entry, i) => {
+    const p = PLAYERS.find(pl => normName(pl.Player) === normName(entry.name));
+    const pos = p ? p.Position : '?';
+    const overall = p ? p.Overall : '—';
+    const mine = p ? myPickIds.has(p.Overall) : false;
+    return `<div style="display:grid;grid-template-columns:32px 28px 1fr 60px;align-items:center;padding:6px 14px;border-bottom:1px solid rgba(36,52,82,.4);gap:8px;${mine ? 'background:rgba(245,158,11,.06);border-left:3px solid var(--pick)' : ''}">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;color:var(--muted)">${i+1}</div>
+      <div class="pos-badge pos-${pos}">${pos}</div>
+      <div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;${mine ? 'color:var(--pick)' : ''}">${entry.name}${mine ? ' ★' : ''}</div>
+        <div style="font-size:11px;color:var(--muted)">Rd ${entry.round} · Pk ${entry.slot}${entry.picker ? ' · ' + entry.picker : ''}</div>
+      </div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:12px;color:var(--muted);text-align:right">#${overall}</div>
+    </div>`;
+  }).join('');
+
+  log.innerHTML = entriesHtml || `<div class="empty-picks" style="color:var(--muted)">Connect to Sleeper or mark<br>players as drafted to see<br>the live draft log here</div>`;
+  countEl.textContent = draftLogEntries.length + ' picks';
+
+  // Scroll to bottom to show latest pick
+  if (draftLogEntries.length) log.scrollTop = log.scrollHeight;
+}
+
+// ── RENDER ROSTER ──
+function renderRoster() {
+  const list = document.getElementById('picksList');
+  const picks = PLAYERS.filter(p => myPickIds.has(p.Overall));
+  if (!picks.length) {
+    list.innerHTML = `<div class="empty-picks">Click <strong>☆ Mine</strong> on any player<br>to add them to your roster<br><br>or connect Sleeper above</div>`;
+  } else {
+    list.innerHTML = picks.map((p, i) => `
+      <div class="pick-row">
+        <div class="pick-num">${i+1}</div>
+        <div class="pos-badge pos-${p.Position}">${p.Position}</div>
+        <div>
+          <div class="pick-name">${p.Player}</div>
+          <div class="pick-meta">${p.Position}${p['Positional Rank']} · Tier ${p.Tier}</div>
+        </div>
+        <button class="remove-btn" onclick="toggleMine('${normName(p.Player)}')" title="Remove">✕</button>
+      </div>`).join('');
+  }
+
+  const counts = {QB:0,RB:0,WR:0,TE:0};
+  picks.forEach(p => { if (counts[p.Position] !== undefined) counts[p.Position]++; });
+  document.getElementById('posCounts').innerHTML = Object.entries(counts).map(([pos,n]) =>
+    `<span class="count-badge pos-${pos}">${pos} ${n}</span>`).join('');
+}
+
+// ── ACTIONS ──
+function toggleMine(id) {
+  if (myPickIds.has(id)) {
+    myPickIds.delete(id);
+    showToast('Removed from roster');
+  } else {
+    myPickIds.add(id);
+    draftedSet.add(id);
+    showToast('✅ Added to roster');
+  }
+  save(); renderList(); renderRoster();
+}
+
+function toggleDrafted(id) {
+  if (draftedSet.has(id)) {
+    draftedSet.delete(id);
+    myPickIds.delete(id);
+    showToast('↩ Marked available');
+  } else {
+    draftedSet.add(id);
+    showToast('❌ Marked drafted');
+  }
+  save(); renderList(); renderRoster();
+}
+
+function setFilter(pos) {
+  currentFilter = pos;
+  document.querySelectorAll('.ftab').forEach(t => {
+    const p = t.dataset.pos;
+    if (p) t.className = 'ftab' + (p === pos ? ' active-' + pos : '');
+  });
+  renderList();
+}
+
+function toggleHideDrafted() {
+  hideDrafted = !hideDrafted;
+  localStorage.setItem('sf_hideDrafted', hideDrafted);
+  const btn = document.getElementById('hideBtn');
+  btn.className = 'ftab' + (hideDrafted ? ' active-HIDE' : '');
+  btn.textContent = hideDrafted ? '✓ Hide Drafted' : 'Hide Drafted';
+  renderList();
+}
+
+function resetAll() {
+  if (!confirm('Reset the entire board? This cannot be undone.')) return;
+  draftedSet.clear(); myPickIds.clear(); draftLogEntries = []; _rawPicksCache = [];
+  save(); renderList(); renderRoster(); renderDraftLog();
+  document.getElementById('rostersBody').innerHTML = '<div class="rosters-empty">Connect to Sleeper to see all team rosters</div>';
+  document.getElementById('rostersTabMeta').textContent = '— connect to load teams —';
+  showToast('🔄 Board reset');
+  document.getElementById('manualRefreshBtn').style.display = 'none';
+}
+
+// ── SLEEPER CONNECT ──
+const HARDCODED_DRAFT_ID = '1354197875130662912';
+// Rotate proxies to avoid rate limiting
+let _proxyIndex = 0;
+const PROXIES = [
+  u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}&_=${Date.now()}`,
+  u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+];
+
+async function sleeperGet(path) {
+  const url = 'https://api.sleeper.app/v1' + path;
+  // Try direct first (works when not running as file://)
+  try {
+    const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(5000) });
+    if (res.ok) {
+      const text = await res.text();
+      if (text && !text.trim().startsWith('<')) return JSON.parse(text);
+    }
+  } catch(e) {}
+  // Rotate through proxies
+  for (let i = 0; i < PROXIES.length; i++) {
+    const idx = (_proxyIndex + i) % PROXIES.length;
+    try {
+      const res = await fetch(PROXIES[idx](url), { cache: 'no-store', signal: AbortSignal.timeout(7000) });
+      if (!res.ok) continue;
+      const text = await res.text();
+      if (!text || text.trim().startsWith('<')) continue;
+      _proxyIndex = (idx + 1) % PROXIES.length; // advance for next call
+      return JSON.parse(text);
+    } catch(e) { continue; }
+  }
+  throw new Error('Could not reach Sleeper — try Paste Picks instead');
+}
+
+let _pollInterval = null, _connectedDraftId = null, _lastPickCount = 0;
+let _lastMyRosterId = null;
+let _slotToUser = {};    // slot -> display name map
+
+async function connectSleeper() {
+  const username = document.getElementById('inUser').value.trim();
+  const draftId  = document.getElementById('inDraft').value.trim() || HARDCODED_DRAFT_ID;
+  showToast('🔌 Connecting...');
+  setLiveStatus('connecting');
+  try {
+    let uid = null;
+    if (username) {
+      const u = await sleeperGet(`/user/${encodeURIComponent(username)}`);
+      if (!u?.user_id) throw new Error('User not found');
+      uid = u.user_id;
+    }
+    let did = draftId || HARDCODED_DRAFT_ID;
+    if (!did && uid) {
+      const drafts = await sleeperGet(`/user/${uid}/drafts/nfl/2025`);
+      if (!drafts?.length) throw new Error('No 2025 drafts found');
+      did = (drafts.find(d => d.status === 'drafting') || drafts.slice(-1)[0]).draft_id;
+    }
+    if (!did) throw new Error('No Draft ID found');
+
+    const [draft, picks, leagueUsers] = await Promise.all([
+      sleeperGet(`/draft/${did}`),
+      sleeperGet(`/draft/${did}/picks`),
+      sleeperGet(`/draft/${did}/slots`).catch(() => null)
+    ]);
+
+    // Build slot -> display name from draft_order (user_id -> slot) + fetch usernames
+    const slotOverride = parseInt(document.getElementById('inSlot').value.trim()) || null;
+    const mySlot = slotOverride || (uid && draft.draft_order ? draft.draft_order[uid] : null);
+    _lastMyRosterId = mySlot;
+
+    // Build slot->name map from draft_order
+    _slotToUser = {};
+    if (draft.draft_order) {
+      // draft_order: { user_id: slot }
+      // Try to get display names by fetching each user (best effort)
+      const userIds = Object.keys(draft.draft_order);
+      const nameMap = {};
+      await Promise.allSettled(userIds.map(async uid2 => {
+        try {
+          const u = await sleeperGet(`/user/${uid2}`);
+          nameMap[uid2] = u.display_name || u.username || uid2;
+        } catch { nameMap[uid2] = uid2; }
+      }));
+      Object.entries(draft.draft_order).forEach(([userId, slot]) => {
+        _slotToUser[slot] = nameMap[userId] || `Team ${slot}`;
+      });
+    }
+
+    updateDraftedFromPicks(picks, true);
+    startPolling(did);
+
+    const bar = document.getElementById('draftInfoBar');
+    bar.innerHTML = '<strong>' + (draft.metadata?.name || 'Draft') + '</strong> · ' + (draft.type||'').toUpperCase() + ' · ' + (draft.settings?.teams||'?') + ' teams · Slot <strong>' + (mySlot||'?') + '</strong> · ID: ' + did;
+    bar.classList.add('show');
+
+    const arr = Array.isArray(picks) ? picks : Object.values(picks||{});
+    showToast(`✅ Connected! ${arr.length} picks loaded · polling every 5s`);
+    document.getElementById("manualRefreshBtn").style.display = "";
+  } catch(e) {
+    setLiveStatus('error');
+    showToast('❌ ' + (e.message || 'Connection failed'));
+    if ((e.message||'').includes('Paste') || (e.message||'').includes('CORS')) {
+      setTimeout(() => openPasteModal(), 1200);
+    }
+  }
+}
+
+function setLiveStatus(state) {
+  const dot  = document.getElementById('liveDot');
+  const lbl  = document.getElementById('liveLabel');
+  const pill = document.getElementById('livePill');
+  if (state === 'live') {
+    dot.className = 'live-dot live'; lbl.className = 'live-label live';
+    pill.style.borderColor = 'var(--green)';
+  } else if (state === 'error') {
+    dot.className = 'live-dot err'; lbl.className = 'live-label err';
+    lbl.textContent = 'Poll error'; pill.style.borderColor = 'var(--red)';
+  } else {
+    dot.className = 'live-dot'; lbl.className = 'live-label';
+    lbl.textContent = 'Connecting...'; pill.style.borderColor = 'var(--yellow)';
+  }
+}
+
+function updateDraftedFromPicks(rawPicks, rebuild) {
+  let picks = Array.isArray(rawPicks) ? rawPicks : Object.values(rawPicks||{});
+  _rawPicksCache = picks; // always cache latest
+
+  if (rebuild) {
+    // Rebuild the draft log in pick order
+    draftLogEntries = picks
+      .sort((a,b) => (a.pick_no||0) - (b.pick_no||0))
+      .map(pick => ({
+        name: ((pick.metadata?.first_name || pick.player?.first_name || '') + ' ' + (pick.metadata?.last_name || pick.player?.last_name || '')).trim(),
+        round: pick.round || '?',
+        slot: pick.draft_slot || pick.pick_no || '?',
+        picker: pick.picked_by || ''
+      })).filter(e => e.name);
+  }
+
+  draftedSet.clear();
+  myPickIds.forEach(id => draftedSet.add(id));
+  picks.forEach(pick => {
+    if (!pick || typeof pick !== 'object') return;
+    const fn = pick.metadata?.first_name || pick.player?.first_name || '';
+    const ln = pick.metadata?.last_name  || pick.player?.last_name  || '';
+    const name = (fn + ' ' + ln).trim();
+    if (!name) return;
+    const matched = PLAYERS.find(p => normName(p.Player) === normName(name));
+    if (!matched && name) console.log('NO MATCH:', name, '->', normName(name));
+    if (matched) {
+      const key = normName(matched.Player);
+      draftedSet.add(key);
+      }
+  });
+  save(); renderList(); renderRoster(); renderDraftLog(); renderLeagueRosters();
+  return draftedSet.size;
+}
+
+function normName(s) { return s.toLowerCase().replace(/\b(jr|sr|ii|iii|iv|v)\b/g,'').replace(/[^a-z]/g,''); }
+
+function startPolling(draftId) {
+  _connectedDraftId = draftId;
+  if (_pollInterval) clearInterval(_pollInterval);
+  pollSleeper();
+  _pollInterval = setInterval(pollSleeper, 10000);
+}
+
+async function manualPoll() {
+  if (!_connectedDraftId) return;
+  const btn = document.getElementById("manualRefreshBtn");
+  btn.textContent = "⏳ Refreshing...";
+  btn.disabled = true;
+  // Pause auto-poll during manual refresh to prevent race condition
+  if (_pollInterval) { clearInterval(_pollInterval); _pollInterval = null; }
+  try {
+    // Try proxies in sequence with cache-busting
+    const raw = await sleeperGet('/draft/' + _connectedDraftId + '/picks?_=' + Date.now());
+    const arr = Array.isArray(raw) ? raw : Object.values(raw||{});
+    updateDraftedFromPicks(raw, true);
+    _lastPickCount = arr.length;
+    const now = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    document.getElementById('liveLabel').textContent = arr.length + ' picks · ' + now;
+    setLiveStatus('live');
+    showToast("🔄 Refreshed — " + arr.length + " picks");
+  } catch(e) {
+    console.error('manualPoll error:', e);
+    showToast("❌ Refresh failed: " + e.message);
+  }
+  btn.textContent = "🔄 Refresh";
+  btn.disabled = false;
+  // Resume auto-poll
+  if (_connectedDraftId && !_pollInterval) {
+    _pollInterval = setInterval(pollSleeper, 10000);
+  }
+}
+
+async function pollSleeper() {
+  if (!_connectedDraftId) return;
+  try {
+    const raw = await sleeperGet('/draft/' + _connectedDraftId + '/picks?_=' + Date.now());
+    const arr = Array.isArray(raw) ? raw : Object.values(raw||{});
+    const prev = _lastPickCount;
+
+    updateDraftedFromPicks(raw, true);
+    _lastPickCount = arr.length;
+      if (arr.length > prev && prev > 0) {
+    showToast(`🔔 ${arr.length - prev} new pick(s)!`);
+      }
+
+    const now = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    document.getElementById('liveLabel').textContent = arr.length + ' picks · ' + now;
+    setLiveStatus('live');
+  } catch(e) {
+    setLiveStatus('error');
+  }
+}
+
+// ── MODALS ──
+function openPasteModal() {
+  document.getElementById('pasteModal').classList.add('open');
+  const u = document.getElementById('inUser').value.trim();
+  if (u) document.getElementById('pasteUsername').value = u;
+}
+function openAddModal() {
+  document.getElementById('addModal').classList.add('open');
+  document.getElementById('addSearch').value = '';
+  renderAddResults();
+  setTimeout(() => document.getElementById('addSearch').focus(), 100);
+}
+function openSetRosterModal() {
+  document.getElementById('setRosterModal').classList.add('open');
+  const current = PLAYERS.filter(p => myPickIds.has(p.Overall)).map(p => p.Player).join('\n');
+  document.getElementById('rosterInput').value = current;
+}
+function closeModal() {
+  document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
+}
+document.querySelectorAll('.modal-overlay').forEach(el =>
+  el.addEventListener('click', e => { if (e.target === el) closeModal(); }));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+function applyManualRoster() {
+  const lines = document.getElementById('rosterInput').value.split('\n').map(l => l.trim()).filter(Boolean);
+  myPickIds.clear();
+  const norm = s => s.toLowerCase().replace(/[^a-z]/g,'');
+  const notFound = [];
+  lines.forEach(line => {
+    let match = PLAYERS.find(p => norm(p.Player) === norm(line));
+    if (!match) match = PLAYERS.find(p => norm(p.Player).includes(norm(line)) || norm(line).includes(norm(p.Player)));
+    if (match) { myPickIds.add(normName(match.Player)); draftedSet.add(normName(match.Player)); }
+    else notFound.push(line);
+  });
+  save(); renderList(); renderRoster(); closeModal();
+  if (notFound.length) showToast(`⚠️ Not found: ${notFound.join(', ')}`);
+  else showToast(`✅ ${lines.length} players set as your team`);
+}
+
+function importPastedPicks() {
+  const raw = document.getElementById('pasteArea').value.trim();
+  if (!raw) { showToast('⚠️ Paste pick data first'); return; }
+  let picks;
+  try { picks = JSON.parse(raw); } catch(e) { showToast('❌ Invalid JSON'); return; }
+  if (!Array.isArray(picks) && picks && typeof picks === 'object') picks = Object.values(picks);
+  if (!Array.isArray(picks)) { showToast('❌ Unexpected format'); return; }
+  updateDraftedFromPicks(picks, true);
+  closeModal();
+  showToast(`✅ Imported ${picks.length} picks`);
+}
+
+function renderAddResults() {
+  const q = (document.getElementById('addSearch').value || '').toLowerCase().trim();
+  const box = document.getElementById('addResults');
+  if (!q) { box.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:13px">Start typing a name...</div>'; return; }
+  const results = PLAYERS.filter(p => p.Player.toLowerCase().includes(q) && !draftedSet.has(p.Overall)).slice(0,12);
+  if (!results.length) { box.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:13px">No available players found</div>'; return; }
+  box.innerHTML = results.map(p => {
+    const mine = myPickIds.has(normName(p.Player));
+    return `<div class="search-result" onclick="quickAddMine('${normName(p.Player)}')">
+      <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;color:var(--muted)">#${p.Overall}</span>
+      <span class="pos-badge pos-${p.Position}">${p.Position}</span>
+      <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px">${p.Player}</span>
+      <button class="btn sm ${mine ? 'danger' : ''}" onclick="event.stopPropagation();quickAddMine('${normName(p.Player)}')">${mine ? '✓ Added' : '+ Add'}</button>
+    </div>`;
+  }).join('');
+}
+
+function quickAddMine(id) {
+  myPickIds.add(id); draftedSet.add(id); // id is already normName(p.Player)
+  save(); renderList(); renderRoster(); renderAddResults();
+  showToast('✅ Added to roster');
+}
+
+// ── LEAGUE ROSTERS DRAWER ──
+let rostersOpen = false;
+
+function toggleRostersDrawer() {
+  rostersOpen = !rostersOpen;
+  document.getElementById('rostersDrawer').classList.toggle('open', rostersOpen);
+  // Shrink the main grid to make room
+  const mainEl = document.querySelector('.main');
+  mainEl.style.height = rostersOpen
+    ? `calc(100vh - var(--header-h) - var(--connect-h) - 316px)`
+    : '';
+}
+
+function renderLeagueRosters() {
+  const picks = _rawPicksCache;
+  if (!picks.length) return;
+
+  // Group picks by roster_id (= draft slot in snake drafts)
+  const teamMap = {}; // slot -> { players: [], name }
+  picks.forEach(pick => {
+    const slot = pick.roster_id || pick.draft_slot || '?';
+    if (!teamMap[slot]) teamMap[slot] = { slot, players: [] };
+    const fn = pick.metadata?.first_name || pick.player?.first_name || '';
+    const ln = pick.metadata?.last_name  || pick.player?.last_name  || '';
+    const name = (fn + ' ' + ln).trim();
+    if (!name) return;
+    const matched = PLAYERS.find(p => normName(p.Player) === normName(name));
+    teamMap[slot].players.push({
+      name,
+      position: matched ? matched.Position : (pick.metadata?.position || '?'),
+      overall: matched ? matched.Overall : null,
+      tier: matched ? matched.Tier : null,
+    });
+  });
+
+  const slots = Object.keys(teamMap).sort((a, b) => Number(a) - Number(b));
+  const totalTeams = slots.length;
+  const totalPicks = picks.length;
+
+  // Update tab meta
+  document.getElementById('rostersTabMeta').textContent =
+    `${totalTeams} teams · ${totalPicks} picks made`;
+
+  const POSITIONS = ['QB', 'RB', 'WR', 'TE'];
+
+  const html = slots.map(slot => {
+    const team = teamMap[slot];
+    const isMe = String(slot) === String(_lastMyRosterId);
+    const displayName = _slotToUser[slot] || `Team ${slot}`;
+    const total = team.players.length;
+
+    const posBuckets = { QB: [], RB: [], WR: [], TE: [], OTHER: [] };
+    team.players.forEach(p => {
+      const b = posBuckets[p.position] ? p.position : 'OTHER';
+      posBuckets[b].push(p);
+    });
+
+    const posRows = POSITIONS.map(pos => {
+      const pList = posBuckets[pos];
+      if (!pList.length) {
+        return `<div class="team-pos-row">
+          <span class="tpos-label ${pos}">${pos}</span>
+          <span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;color:var(--border)">—</span>
+        </div>`;
+      }
+      const pips = pList.map(p =>
+        `<div class="pip ${pos}" title="${p.name}${p.overall ? ' (#'+p.overall+')' : ''}">${pos[0]}</div>`
+      ).join('');
+      return `<div class="team-pos-row">
+        <span class="tpos-label ${pos}">${pos}</span>
+        <div class="tpos-pips">${pips}</div>
+        <span class="tpos-count">${pList.length}</span>
+      </div>`;
+    }).join('');
+
+    return `<div class="team-card${isMe ? ' is-mine' : ''}">
+      <div class="team-name" title="${displayName}">${isMe ? '★ ' : ''}${displayName}</div>
+      ${posRows}
+      <div class="team-total">Total: <strong>${total}</strong></div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('rostersBody').innerHTML =
+    `<div class="rosters-grid">${html}</div>`;
+}
+
+// ── DRAFT LOG COLLAPSE ──
+let logCollapsed = false;
+function toggleDraftLog() {
+  logCollapsed = !logCollapsed;
+  const panel  = document.getElementById('logPanel');
+  const main   = panel.closest('.main');
+  const btn    = document.getElementById('logToggleBtn');
+  panel.classList.toggle('collapsed', logCollapsed);
+  main.classList.toggle('log-collapsed', logCollapsed);
+  btn.textContent = logCollapsed ? '▶' : '◀';
+  btn.title = logCollapsed ? 'Expand draft log' : 'Collapse draft log';
+}
+
+// ── TOAST ──
+let toastT;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastT);
+  toastT = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ── INIT ──
+// Sync hide button visual to persisted state
+(function() {
+  const btn = document.getElementById('hideBtn');
+  if (btn && hideDrafted) {
+    btn.className = 'ftab active-HIDE';
+    btn.textContent = '✓ Hide Drafted';
+  }
+})();
+renderList();
+renderRoster();
+renderDraftLog();
+
+// Auto-connect on load
+setTimeout(() => {
+  startPolling(HARDCODED_DRAFT_ID);
+  showToast('🔌 Auto-connecting to draft...');
+}, 500);
+</script>
+</body>
+</html>
