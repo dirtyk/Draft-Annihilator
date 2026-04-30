@@ -330,6 +330,58 @@ body { font-family: 'Barlow', sans-serif; color: var(--text); font-size: 14px; }
 .toast.show { opacity: 1; transform: translateY(0); }
 
 /* ══ LEAGUE ROSTERS DRAWER ══ */
+/* ── CLOCK / SCARCITY / VALUE BAR ── */
+.draft-status-bar {
+  display: none; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 6px 16px; background: var(--surface2);
+  border-bottom: 1px solid var(--border); font-family: 'Barlow Condensed', sans-serif;
+}
+.draft-status-bar.show { display: flex; }
+.clock-pill {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(0,212,255,0.08); border: 1px solid var(--accent);
+  border-radius: 6px; padding: 4px 10px;
+}
+.clock-label { font-size: 11px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+.clock-team { font-size: 14px; font-weight: 800; color: var(--accent); letter-spacing: 1px; }
+.clock-pick { font-size: 11px; color: var(--muted); }
+.my-picks-pill {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(245,158,11,0.08); border: 1px solid var(--pick);
+  border-radius: 6px; padding: 4px 10px;
+}
+.my-picks-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+.my-picks-slots { font-size: 13px; font-weight: 700; color: var(--pick); }
+.scarcity-bar {
+  display: flex; align-items: center; gap: 6px; flex: 1;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 10px;
+}
+.scarcity-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-right: 4px; }
+.scar-pos { display: flex; align-items: center; gap: 4px; margin-right: 8px; }
+.scar-pos-name { font-size: 10px; font-weight: 800; padding: 1px 5px; border-radius: 3px; }
+.scar-pos-name.QB { background: rgba(255,107,53,.25); color: var(--qb); }
+.scar-pos-name.RB { background: rgba(34,197,94,.25);  color: var(--rb); }
+.scar-pos-name.WR { background: rgba(0,212,255,.25);  color: var(--wr); }
+.scar-pos-name.TE { background: rgba(168,85,247,.25); color: var(--te); }
+.scar-count { font-size: 13px; font-weight: 800; color: var(--text); }
+.scar-bar-wrap { width: 40px; height: 4px; background: var(--border); border-radius: 2px; }
+.scar-bar-fill { height: 4px; border-radius: 2px; }
+
+/* Value badge on player cards */
+.value-badge {
+  font-family: 'Barlow Condensed', sans-serif; font-size: 10px; font-weight: 800;
+  padding: 1px 5px; border-radius: 3px; letter-spacing: 0.5px; flex-shrink: 0;
+}
+.value-badge.vgood { background: rgba(34,197,94,.25); color: #22c55e; border: 1px solid rgba(34,197,94,.4); }
+.value-badge.vgreat { background: rgba(0,212,255,.2); color: var(--accent); border: 1px solid rgba(0,212,255,.4); }
+
+/* Pick number on draft log */
+.pick-num-badge {
+  font-family: 'Barlow Condensed', sans-serif; font-size: 10px; color: var(--muted);
+  letter-spacing: 0.5px;
+}
+
 .rosters-drawer {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 90;
   background: var(--surface);
@@ -480,6 +532,23 @@ body { font-family: 'Barlow', sans-serif; color: var(--text); font-size: 14px; }
     <input type="file" id="sheetFileInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="loadRankingsFile(this)">
   </div>
   <div id="draftInfoBar" class="draft-info-bar"></div>
+</div>
+
+<!-- ══ DRAFT STATUS BAR ══ -->
+<div class="draft-status-bar" id="draftStatusBar">
+  <div class="clock-pill">
+    <span class="clock-label">On Clock</span>
+    <span class="clock-team" id="clockTeam">—</span>
+    <span class="clock-pick" id="clockPick"></span>
+  </div>
+  <div class="my-picks-pill">
+    <span class="my-picks-label">My Next Picks</span>
+    <span class="my-picks-slots" id="myNextPicks">—</span>
+  </div>
+  <div class="scarcity-bar">
+    <span class="scarcity-label">Top 36 Left</span>
+    <div id="scarcityPills"></div>
+  </div>
 </div>
 
 <!-- ══ MAIN 3-COL ══ -->
@@ -725,10 +794,19 @@ function renderList() {
     }
 
     const drafted = draftedSet.has(normName(p.Player));
-    const mine    = myPickIds.has(p.Overall);
+    const mine    = myPickIds.has(normName(p.Player));
     let cls = 'player-row';
     if (drafted) cls += ' drafted';
     else if (mine) cls += ' mine';
+
+    // Value badge: compare player rank to current pick number
+    const currentPick = draftedSet.size + 1;
+    const valueDiff = currentPick - p.Overall;
+    let valueBadge = '';
+    if (!drafted) {
+      if (valueDiff >= 12) valueBadge = '<span class="value-badge vgreat">🔥 STEAL</span>';
+      else if (valueDiff >= 6) valueBadge = '<span class="value-badge vgood">▲ VALUE</span>';
+    }
 
     html += `<div class="${cls}" id="row-${p.Overall}">
       <div class="rank-num">${p.Overall}</div>
@@ -737,6 +815,7 @@ function renderList() {
         <div class="pname">${p.Player}</div>
         <div class="psub">Age ${Number(p.Age).toFixed(1)}</div>
       </div>
+      ${valueBadge}
       <div class="pos-rank">${p.Position}${p['Positional Rank']}</div>
       <div class="action-cell">
         <button class="mark-btn ${mine ? 'is-mine' : ''}" onclick="toggleMine('${normName(p.Player)}')">${mine ? '★ Mine' : '☆ Mine'}</button>
@@ -765,13 +844,13 @@ function renderDraftLog() {
     const p = PLAYERS.find(pl => normName(pl.Player) === normName(entry.name));
     const pos = p ? p.Position : '?';
     const overall = p ? p.Overall : '—';
-    const mine = p ? myPickIds.has(p.Overall) : false;
+    const mine = p ? myPickIds.has(normName(p.Player)) : false;
     return `<div style="display:grid;grid-template-columns:32px 28px 1fr 60px;align-items:center;padding:6px 14px;border-bottom:1px solid rgba(36,52,82,.4);gap:8px;${mine ? 'background:rgba(245,158,11,.06);border-left:3px solid var(--pick)' : ''}">
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;color:var(--muted)">${i+1}</div>
       <div class="pos-badge pos-${pos}">${pos}</div>
       <div>
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;${mine ? 'color:var(--pick)' : ''}">${entry.name}${mine ? ' ★' : ''}</div>
-        <div style="font-size:11px;color:var(--muted)">Rd ${entry.round} · Pk ${entry.slot}${entry.picker ? ' · ' + entry.picker : ''}</div>
+        <div style="font-size:11px;color:var(--muted)">Pick #${i+1} · Rd ${entry.round} Pk ${entry.slot}${entry.picker ? ' · ' + entry.picker : ''}</div>
       </div>
       <div style="font-family:'Barlow Condensed',sans-serif;font-size:12px;color:var(--muted);text-align:right">#${overall}</div>
     </div>`;
@@ -787,7 +866,7 @@ function renderDraftLog() {
 // ── RENDER ROSTER ──
 function renderRoster() {
   const list = document.getElementById('picksList');
-  const picks = PLAYERS.filter(p => myPickIds.has(p.Overall));
+  const picks = PLAYERS.filter(p => myPickIds.has(normName(p.Player)));
   if (!picks.length) {
     list.innerHTML = `<div class="empty-picks">Click <strong>☆ Mine</strong> on any player<br>to add them to your roster<br><br>or connect Sleeper above</div>`;
   } else {
@@ -863,7 +942,18 @@ function resetAll() {
 }
 
 // ── SLEEPER CONNECT ──
-const HARDCODED_DRAFT_ID = '1354197875130662912';
+// ╔══════════════════════════════════════════════╗
+// ║           SEASON CONFIG — EDIT HERE          ║
+// ╚══════════════════════════════════════════════╝
+const CONFIG = {
+  draftId:  '1354197875130662912',  // Sleeper draft ID
+  username: 'kkholiday',            // Your Sleeper username
+  teams:    12,                     // Number of teams
+  rounds:   20,                     // Number of rounds
+};
+
+// (derived — do not edit)
+const HARDCODED_DRAFT_ID = CONFIG.draftId;
 // Rotate proxies to avoid rate limiting
 let _proxyIndex = 0;
 const PROXIES = [
@@ -899,6 +989,8 @@ async function sleeperGet(path) {
 let _pollInterval = null, _connectedDraftId = null, _lastPickCount = 0;
 let _lastMyRosterId = null;
 let _slotToUser = {};    // slot -> display name map
+let _numTeams = 12;      // total teams in draft
+let _totalRounds = 20;   // total rounds
 
 async function connectSleeper() {
   const username = document.getElementById('inUser').value.trim();
@@ -951,6 +1043,9 @@ async function connectSleeper() {
 
     updateDraftedFromPicks(picks, true);
     startPolling(did);
+
+    _numTeams = draft.settings?.teams || CONFIG.teams;
+    _totalRounds = draft.settings?.rounds || CONFIG.rounds;
 
     const bar = document.getElementById('draftInfoBar');
     bar.innerHTML = '<strong>' + (draft.metadata?.name || 'Draft') + '</strong> · ' + (draft.type||'').toUpperCase() + ' · ' + (draft.settings?.teams||'?') + ' teams · Slot <strong>' + (mySlot||'?') + '</strong> · ID: ' + did;
@@ -1016,6 +1111,7 @@ function updateDraftedFromPicks(rawPicks, rebuild) {
       }
   });
   save(); renderList(); renderRoster(); renderDraftLog(); renderLeagueRosters();
+  updateDraftStatusBar(draftedSet.size);
   return draftedSet.size;
 }
 
@@ -1156,6 +1252,60 @@ function quickAddMine(id) {
 // ── LEAGUE ROSTERS DRAWER ──
 let rostersOpen = false;
 
+// ── DRAFT STATUS BAR ──
+function updateDraftStatusBar(pickCount) {
+  const bar = document.getElementById('draftStatusBar');
+  if (!_connectedDraftId || !_lastMyRosterId) return;
+  bar.classList.add('show');
+
+  const n = _numTeams || 12;
+  const nextPick = pickCount + 1;
+  const round = Math.ceil(nextPick / n);
+  const posInRound = ((nextPick - 1) % n) + 1;
+  // Snake: odd rounds go 1..n, even rounds go n..1
+  const slotOnClock = round % 2 === 1 ? posInRound : (n - posInRound + 1);
+  const teamOnClock = _slotToUser[slotOnClock] || `Team ${slotOnClock}`;
+  const isMyTurn = String(slotOnClock) === String(_lastMyRosterId);
+
+  document.getElementById('clockTeam').textContent = teamOnClock;
+  document.getElementById('clockTeam').style.color = isMyTurn ? 'var(--pick)' : 'var(--accent)';
+  document.getElementById('clockPick').textContent = `Pick #${nextPick} · Rd ${round} Pk ${posInRound}`;
+
+  // My next 3 picks
+  const mySlot = parseInt(_lastMyRosterId);
+  const myPicks = [];
+  for (let r = round; r <= (_totalRounds || 20) && myPicks.length < 3; r++) {
+    const pickInRound = r % 2 === 1 ? mySlot : (n - mySlot + 1);
+    const overall = (r - 1) * n + pickInRound;
+    if (overall >= nextPick) myPicks.push(`#${overall}`);
+  }
+  document.getElementById('myNextPicks').textContent = myPicks.join(' · ') || '—';
+
+  // Scarcity: count remaining top-N players per position
+  const TOP_N = 36;
+  const topPlayers = PLAYERS.slice(0, TOP_N);
+  const posCounts = { QB: 0, RB: 0, WR: 0, TE: 0 };
+  const posTotal  = { QB: 0, RB: 0, WR: 0, TE: 0 };
+  topPlayers.forEach(p => {
+    const pos = p.Position;
+    if (!(pos in posCounts)) return;
+    posTotal[pos]++;
+    if (!draftedSet.has(normName(p.Player))) posCounts[pos]++;
+  });
+
+  const pillsHtml = ['QB','RB','WR','TE'].map(pos => {
+    const rem = posCounts[pos];
+    const tot = posTotal[pos] || 1;
+    const pct = Math.round((rem / tot) * 100);
+    return `<div class="scar-pos">
+      <span class="scar-pos-name ${pos}">${pos}</span>
+      <span class="scar-count">${rem}</span>
+      <div class="scar-bar-wrap"><div class="scar-bar-fill" style="width:${pct}%;background:var(--${pos.toLowerCase()},var(--accent))"></div></div>
+    </div>`;
+  }).join('');
+  document.getElementById('scarcityPills').innerHTML = pillsHtml;
+}
+
 function toggleRostersDrawer() {
   rostersOpen = !rostersOpen;
   document.getElementById('rostersDrawer').classList.toggle('open', rostersOpen);
@@ -1262,6 +1412,9 @@ function showToast(msg) {
 }
 
 // ── INIT ──
+// Apply CONFIG defaults to inputs
+document.getElementById('inDraft').value = document.getElementById('inDraft').value || CONFIG.draftId;
+document.getElementById('inUser').value  = document.getElementById('inUser').value  || CONFIG.username;
 // Sync hide button visual to persisted state
 (function() {
   const btn = document.getElementById('hideBtn');
