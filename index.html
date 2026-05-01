@@ -203,9 +203,9 @@ body { font-family: 'Barlow', sans-serif; color: var(--text); font-size: 14px; }
 }
 
 .player-row {
-  display: grid; grid-template-columns: 40px 28px 1fr 52px 80px;
-  align-items: center; padding: 6px 14px; border-bottom: 1px solid rgba(36,52,82,.4);
-  gap: 8px; transition: background 0.1s; cursor: default;
+  display: grid; grid-template-columns: 36px 28px 1fr auto auto 48px 76px;
+  align-items: center; padding: 5px 14px; border-bottom: 1px solid rgba(36,52,82,.4);
+  gap: 6px; transition: background 0.1s; cursor: default; min-height: 36px;
 }
 .player-row:hover { background: var(--surface2); }
 .player-row.drafted { opacity: 0.28; }
@@ -220,9 +220,10 @@ body { font-family: 'Barlow', sans-serif; color: var(--text); font-size: 14px; }
 .pos-RB { background: rgba(34,197,94,.25);  color: var(--rb); border: 1px solid rgba(34,197,94,.4); }
 .pos-WR { background: rgba(0,212,255,.25);  color: var(--wr); border: 1px solid rgba(0,212,255,.4); }
 .pos-TE { background: rgba(168,85,247,.25); color: var(--te); border: 1px solid rgba(168,85,247,.4); }
+.pname-cell { display: flex; align-items: baseline; gap: 0; overflow: hidden; white-space: nowrap; }
 .pname { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.psub  { font-size: 11px; color: var(--muted); }
-.pos-rank { font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 13px; color: var(--muted); text-align: center; }
+.psub  { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.pos-rank { display: none; } /* now inline in pname-cell */
 .action-cell { display: flex; gap: 4px; }
 .mark-btn {
   background: transparent; border: 1px solid var(--border); border-radius: 4px;
@@ -835,12 +836,12 @@ function renderList() {
     html += `<div class="${cls}" id="row-${p.Overall}">
       <div class="rank-num">${p.Overall}</div>
       <div class="pos-badge pos-${p.Position}">${p.Position}</div>
-      <div>
-        <div class="pname">${p.Player}</div>
-        <div class="psub">Age ${Number(p.Age).toFixed(1)}</div>
+      <div class="pname-cell">
+        <span class="pname">${p.Player}</span>
+        <span class="psub"> · Age ${Number(p.Age).toFixed(1)} · ${p.Position}${p['Positional Rank']}</span>
       </div>
-      ${valueBadge}${surviveBadge}
-      <div class="pos-rank">${p.Position}${p['Positional Rank']}</div>
+      ${valueBadge}
+      ${surviveBadge}
       <div class="action-cell">
         <button class="mark-btn ${mine ? 'is-mine' : ''}" onclick="toggleMine('${normName(p.Player)}')">${mine ? '★ Mine' : '☆ Mine'}</button>
         <button class="mark-drafted ${drafted ? 'is-drafted' : ''}" onclick="toggleDrafted('${normName(p.Player)}')">✕</button>
