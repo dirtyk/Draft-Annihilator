@@ -1128,7 +1128,7 @@ function updateDraftedFromPicks(rawPicks, rebuild) {
   }
 
   draftedSet.clear();
-  myPickIds.forEach(id => draftedSet.add(id));
+  myPickIds.clear(); // rebuild from Sleeper data each time
   picks.forEach(pick => {
     if (!pick || typeof pick !== 'object') return;
     const fn = pick.metadata?.first_name || pick.player?.first_name || '';
@@ -1140,7 +1140,12 @@ function updateDraftedFromPicks(rawPicks, rebuild) {
     if (matched) {
       const key = normName(matched.Player);
       draftedSet.add(key);
+      // Auto-mark as mine if this pick belongs to my roster slot
+      const pickSlot = pick.roster_id || pick.draft_slot;
+      if (_lastMyRosterId && String(pickSlot) === String(_lastMyRosterId)) {
+        myPickIds.add(key);
       }
+    }
   });
   save(); renderList(); renderRoster(); renderDraftLog(); renderLeagueRosters();
   updateDraftStatusBar(draftedSet.size);
