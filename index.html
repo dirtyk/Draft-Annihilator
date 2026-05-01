@@ -203,16 +203,16 @@ body { font-family: 'Barlow', sans-serif; color: var(--text); font-size: 14px; }
 }
 
 .player-row {
-  display: grid; grid-template-columns: 36px 28px 1fr auto auto 48px 76px;
-  align-items: center; padding: 5px 14px; border-bottom: 1px solid rgba(36,52,82,.4);
+  display: flex; align-items: center; padding: 5px 14px;
+  border-bottom: 1px solid rgba(36,52,82,.4);
   gap: 6px; transition: background 0.1s; cursor: default; min-height: 36px;
 }
 .player-row:hover { background: var(--surface2); }
 .player-row.drafted { opacity: 0.28; }
 .player-row.drafted .pname { text-decoration: line-through; }
 .player-row.mine { background: rgba(245,158,11,.06); border-left: 3px solid var(--pick); padding-left: 11px; }
-.rank-num { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 15px; color: var(--muted); text-align: right; }
-.pos-badge {
+.rank-num { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 15px; color: var(--muted); text-align: right; width: 32px; flex-shrink: 0; }
+.pos-badge { flex-shrink: 0;
   font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
   font-size: 10px; padding: 2px 5px; border-radius: 3px; text-align: center;
 }
@@ -220,11 +220,11 @@ body { font-family: 'Barlow', sans-serif; color: var(--text); font-size: 14px; }
 .pos-RB { background: rgba(34,197,94,.25);  color: var(--rb); border: 1px solid rgba(34,197,94,.4); }
 .pos-WR { background: rgba(0,212,255,.25);  color: var(--wr); border: 1px solid rgba(0,212,255,.4); }
 .pos-TE { background: rgba(168,85,247,.25); color: var(--te); border: 1px solid rgba(168,85,247,.4); }
-.pname-cell { display: flex; align-items: baseline; gap: 0; overflow: hidden; white-space: nowrap; }
+.pname-cell { display: flex; align-items: baseline; gap: 0; overflow: hidden; white-space: nowrap; flex: 1; min-width: 0; }
 .pname { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .psub  { font-size: 11px; color: var(--muted); white-space: nowrap; }
 .pos-rank { display: none; } /* now inline in pname-cell */
-.action-cell { display: flex; gap: 4px; }
+.action-cell { display: flex; gap: 4px; flex-shrink: 0; margin-left: auto; }
 .mark-btn {
   background: transparent; border: 1px solid var(--border); border-radius: 4px;
   color: var(--muted); font-size: 11px; padding: 3px 7px; cursor: pointer;
@@ -370,7 +370,7 @@ body { font-family: 'Barlow', sans-serif; color: var(--text); font-size: 14px; }
 .scar-bar-fill { height: 4px; border-radius: 2px; }
 
 /* Survival probability badge */
-.survive-badge {
+.survive-badge { flex-shrink: 0;
   font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 800;
   padding: 2px 6px; border-radius: 3px; letter-spacing: 0.5px; flex-shrink: 0;
   min-width: 44px; text-align: center;
@@ -381,7 +381,7 @@ body { font-family: 'Barlow', sans-serif; color: var(--text); font-size: 14px; }
 .survive-none   { background: rgba(255,59,59,.15); color: #ff3b3b; border: 1px solid rgba(255,59,59,.3); }
 
 /* Value badge on player cards */
-.value-badge {
+.value-badge { flex-shrink: 0;
   font-family: 'Barlow Condensed', sans-serif; font-size: 10px; font-weight: 800;
   padding: 1px 5px; border-radius: 3px; letter-spacing: 0.5px; flex-shrink: 0;
 }
