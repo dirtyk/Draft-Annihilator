@@ -368,6 +368,17 @@ body { font-family: 'Barlow', sans-serif; color: var(--text); font-size: 14px; }
 .scar-bar-wrap { width: 40px; height: 4px; background: var(--border); border-radius: 2px; }
 .scar-bar-fill { height: 4px; border-radius: 2px; }
 
+/* Survival probability badge */
+.survive-badge {
+  font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 800;
+  padding: 2px 6px; border-radius: 3px; letter-spacing: 0.5px; flex-shrink: 0;
+  min-width: 44px; text-align: center;
+}
+.survive-high   { background: rgba(34,197,94,.2);  color: #22c55e; border: 1px solid rgba(34,197,94,.4); }
+.survive-medium { background: rgba(245,158,11,.2); color: var(--pick); border: 1px solid rgba(245,158,11,.4); }
+.survive-low    { background: rgba(255,107,53,.2); color: var(--qb); border: 1px solid rgba(255,107,53,.4); }
+.survive-none   { background: rgba(255,59,59,.15); color: #ff3b3b; border: 1px solid rgba(255,59,59,.3); }
+
 /* Value badge on player cards */
 .value-badge {
   font-family: 'Barlow Condensed', sans-serif; font-size: 10px; font-weight: 800;
@@ -782,6 +793,9 @@ function renderList() {
   const list = document.getElementById('playerList');
   let html = '', lastTier = null, shown = 0;
 
+  // Compute survival odds once for all players
+  const survivalOdds = _lastMyRosterId ? computeSurvivalOdds() : new Map();
+
   for (const p of PLAYERS) {
     if (currentFilter !== 'ALL' && p.Position !== currentFilter) continue;
     if (search && !p.Player.toLowerCase().includes(search)) continue;
@@ -808,6 +822,16 @@ function renderList() {
       else if (valueDiff >= 6) valueBadge = '<span class="value-badge vgood">▲ VALUE</span>';
     }
 
+    // Survival badge
+    let surviveBadge = '';
+    if (!drafted && _lastMyRosterId) {
+      const pct = survivalOdds.get(normName(p.Player));
+      if (pct !== null && pct !== undefined) {
+        let cls = pct >= 70 ? 'survive-high' : pct >= 45 ? 'survive-medium' : pct >= 25 ? 'survive-low' : 'survive-none';
+        surviveBadge = `<span class="survive-badge ${cls}" title="Estimated chance this player is available at your next pick">${pct}%</span>`;
+      }
+    }
+
     html += `<div class="${cls}" id="row-${p.Overall}">
       <div class="rank-num">${p.Overall}</div>
       <div class="pos-badge pos-${p.Position}">${p.Position}</div>
@@ -815,7 +839,7 @@ function renderList() {
         <div class="pname">${p.Player}</div>
         <div class="psub">Age ${Number(p.Age).toFixed(1)}</div>
       </div>
-      ${valueBadge}
+      ${valueBadge}${surviveBadge}
       <div class="pos-rank">${p.Position}${p['Positional Rank']}</div>
       <div class="action-cell">
         <button class="mark-btn ${mine ? 'is-mine' : ''}" onclick="toggleMine('${normName(p.Player)}')">${mine ? '★ Mine' : '☆ Mine'}</button>
@@ -1251,6 +1275,118 @@ function quickAddMine(id) {
 
 // ── LEAGUE ROSTERS DRAWER ──
 let rostersOpen = false;
+
+// ── PICK SURVIVAL PREDICTOR ──
+function computeSurvivalOdds() {
+  // Returns a Map: normName -> survival % (0-100)
+  const odds = new Map();
+  if (!_lastMyRosterId || !_rawPicksCache) return odds;
+
+  const n = _numTeams;
+  const currentPick = draftedSet.size + 1;
+  const mySlot = parseInt(_lastMyRosterId);
+
+  // Find picks between now and my next pick
+  const round = Math.ceil(currentPick / n);
+  const posInRound = ((currentPick - 1) % n) + 1;
+  const slotOnClock = round % 2 === 1 ? posInRound : (n - posInRound + 1);
+
+  // Figure out which slots pick before me in the current round/next round
+  const slotsBeforeMe = [];
+  let slot = slotOnClock;
+  let r = round;
+  while (slotsBeforeMe.length < n * 2) { // scan up to 2 rounds ahead
+    if (r % 2 === 1) {
+      // Ascending
+      if (slot === mySlot) break;
+      slotsBeforeMe.push(slot);
+      slot++;
+      if (slot > n) { r++; slot = n; } // move to next round descending
+    } else {
+      // Descending
+      if (slot === mySlot) break;
+      slotsBeforeMe.push(slot);
+      slot--;
+      if (slot < 1) { r++; slot = 1; } // move to next round ascending
+    }
+  }
+  const picksUntilMe = slotsBeforeMe.length;
+
+  // Build team positional needs from raw picks
+  const teamPos = {}; // slot -> { QB:n, RB:n, WR:n, TE:n }
+  _rawPicksCache.forEach(pick => {
+    const s = pick.roster_id || pick.draft_slot;
+    if (!s) return;
+    if (!teamPos[s]) teamPos[s] = { QB: 0, RB: 0, WR: 0, TE: 0 };
+    const fn = pick.metadata?.first_name || pick.player?.first_name || '';
+    const ln = pick.metadata?.last_name  || pick.player?.last_name  || '';
+    const name = (fn + ' ' + ln).trim();
+    const matched = PLAYERS.find(p => normName(p.Player) === normName(name));
+    const pos = matched ? matched.Position : (pick.metadata?.position || '');
+    if (pos in teamPos[s]) teamPos[s][pos]++;
+  });
+
+  // Count how many teams picking before me have < 1 of each position (superflex: need 2 QBs)
+  const needCounts = { QB: 0, RB: 0, WR: 0, TE: 0 };
+  slotsBeforeMe.forEach(s => {
+    const t = teamPos[s] || { QB: 0, RB: 0, WR: 0, TE: 0 };
+    if (t.QB < 2) needCounts.QB++;  // superflex: teams want 2 QBs
+    if (t.RB < 3) needCounts.RB++;
+    if (t.WR < 3) needCounts.WR++;
+    if (t.TE < 1) needCounts.TE++;
+  });
+
+  // For each available player, compute survival %
+  const availablePlayers = PLAYERS.filter(p => !draftedSet.has(normName(p.Player)));
+
+  POSITIONS_ORDER = ['QB','RB','WR','TE'];
+  // Count available players per position ranked above each player
+  const posCounts = { QB: 0, RB: 0, WR: 0, TE: 0 };
+
+  availablePlayers.forEach(p => {
+    const pos = p.Position;
+    if (!(pos in posCounts)) { odds.set(normName(p.Player), null); return; }
+
+    // How many of this position are available and ranked ahead of this player?
+    const betterAvail = availablePlayers.filter(
+      q => q.Position === pos && q.Overall < p.Overall
+    ).length;
+
+    // Demand for this position from teams picking before me
+    const demand = needCounts[pos] || 0;
+
+    // Base survival: if demand > betterAvail, this player faces direct competition
+    // Each pick before me that needs this pos has some chance of taking a player of this tier
+    // Probability that at least one of the 'demand' teams takes THIS player
+    // = 1 - P(none of them take a player ranked <= this player)
+    // Simplified: treat each needy team as having a pick_chance of taking top available at pos
+    const posLeft = availablePlayers.filter(q => q.Position === pos).length;
+    if (posLeft === 0) { odds.set(normName(p.Player), null); return; }
+
+    // Tier weight: Tier 1 = very likely drafted, Tier 4+ = less likely
+    const tierFactor = Math.max(0.2, 1 - (p.Tier - 1) * 0.15);
+
+    // For each pick before me, probability this player gets taken
+    // = (demand / picksUntilMe) * tierFactor * (1 / posLeft)
+    // Cumulative across picksUntilMe picks:
+    let survivalProb = 1.0;
+    const pickChancePerPick = Math.min(0.9, (demand / Math.max(1, picksUntilMe)) * tierFactor * (betterAvail === 0 ? 2.5 : 1.2 / (betterAvail + 1)));
+    for (let i = 0; i < picksUntilMe; i++) {
+      survivalProb *= (1 - pickChancePerPick);
+    }
+
+    // Adjust for overall rank vs pick position (raw ADP signal)
+    const adpGap = currentPick - p.Overall;
+    if (adpGap > 15) survivalProb *= 0.3;
+    else if (adpGap > 8) survivalProb *= 0.55;
+    else if (adpGap > 3) survivalProb *= 0.75;
+    else if (adpGap < -10) survivalProb = Math.min(survivalProb * 1.4, 0.97);
+
+    odds.set(normName(p.Player), Math.round(Math.min(97, Math.max(3, survivalProb * 100))));
+  });
+
+  return odds;
+}
 
 // ── DRAFT STATUS BAR ──
 function updateDraftStatusBar(pickCount) {
