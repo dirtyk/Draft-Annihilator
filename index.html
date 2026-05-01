@@ -114,7 +114,20 @@ body { font-family: 'Barlow', sans-serif; color: var(--text); font-size: 14px; }
 }
 
 /* Collapsed log panel */
-.log-panel { display: flex; flex-direction: column; overflow: hidden; transition: all 0.3s ease; }
+.log-panel { display: flex; flex-direction: column; overflow: hidden; transition: all 0.3s ease; position: relative; }
+.log-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url('https://upload.wikimedia.org/wikipedia/en/0/03/Walter_White_S5B.png');
+  background-size: 55%;
+  background-repeat: no-repeat;
+  background-position: center 20%;
+  opacity: 0.06;
+  pointer-events: none;
+  z-index: 0;
+}
+.log-panel .panel-scroll, .log-panel .log-panel-header { position: relative; z-index: 1; }
 .log-panel + .panel { border-left: 1px solid var(--border); }
 .log-panel .panel-scroll { overflow-y: auto; flex: 1; scrollbar-width: thin; scrollbar-color: var(--border) transparent; transition: opacity 0.2s ease; }
 .log-panel.collapsed .panel-scroll { opacity: 0; pointer-events: none; overflow: hidden; }
