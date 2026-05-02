@@ -534,11 +534,11 @@ body { font-family: 'Barlow', sans-serif; color: var(--text); font-size: 14px; }
   </div>
   <div class="connect-field">
     <label>Draft ID</label>
-    <input class="connect-input" id="inDraft" placeholder="draft ID" value="1354197875130662912" style="width:200px">
+    <input class="connect-input" id="inDraft" placeholder="draft ID" value="1356138031270096896" style="width:200px">
   </div>
   <div class="connect-field">
     <label>My Roster Slot #</label>
-    <input class="connect-input" id="inSlot" placeholder="e.g. 3" type="number" min="1" max="20" style="width:80px">
+    <input class="connect-input" id="inSlot" placeholder="e.g. 3" type="number" min="1" max="20" style="width:80px" onchange="applySlotAndRefresh()">
   </div>
   <div class="connect-actions">
     <button class="btn purple" onclick="connectSleeper()">⚡ Connect</button>
@@ -978,7 +978,7 @@ function resetAll() {
 // ║           SEASON CONFIG — EDIT HERE          ║
 // ╚══════════════════════════════════════════════╝
 const CONFIG = {
-  draftId:  '1354197875130662912',  // Sleeper draft ID
+  draftId:  '1356138031270096896',  // Sleeper draft ID
   username: 'kkholiday',            // Your Sleeper username
   teams:    12,                     // Number of teams
   rounds:   20,                     // Number of rounds
@@ -1052,6 +1052,7 @@ async function connectSleeper() {
 
     // Build slot -> display name from draft_order (user_id -> slot) + fetch usernames
     const slotOverride = parseInt(document.getElementById('inSlot').value.trim()) || null;
+    // Store slot in input for reference even if not connecting
     const mySlot = slotOverride || (uid && draft.draft_order ? draft.draft_order[uid] : null);
     _lastMyRosterId = mySlot;
 
@@ -1141,8 +1142,14 @@ function updateDraftedFromPicks(rawPicks, rebuild) {
       const key = normName(matched.Player);
       draftedSet.add(key);
       // Auto-mark as mine if this pick belongs to my roster slot
-      const pickSlot = pick.roster_id || pick.draft_slot;
-      if (_lastMyRosterId && String(pickSlot) === String(_lastMyRosterId)) {
+      // Mock drafts use draft_slot, real leagues use roster_id
+      const pickSlot = pick.draft_slot || pick.roster_id || pick.pick_no;
+      // Also try deriving slot from pick_no and round
+      const derivedSlot = pick.metadata?.slot || pick.slot;
+      const slotMatch = String(pickSlot) === String(_lastMyRosterId) ||
+                        String(derivedSlot) === String(_lastMyRosterId);
+      if (_lastMyRosterId && slotMatch) {
+        console.log('MY PICK:', name, 'slot:', pickSlot, 'derived:', derivedSlot, 'mySlot:', _lastMyRosterId);
         myPickIds.add(key);
       }
     }
@@ -1223,9 +1230,21 @@ function openAddModal() {
   renderAddResults();
   setTimeout(() => document.getElementById('addSearch').focus(), 100);
 }
+function applySlotAndRefresh() {
+  const slot = parseInt(document.getElementById('inSlot').value.trim());
+  if (!slot) { showToast('⚠️ Enter your draft slot first'); return; }
+  _lastMyRosterId = slot;
+  if (_rawPicksCache && _rawPicksCache.length > 0) {
+    updateDraftedFromPicks(_rawPicksCache, true);
+    showToast('✅ Slot set to ' + slot + ' — roster updated');
+  } else {
+    showToast('✅ Slot set to ' + slot);
+  }
+}
+
 function openSetRosterModal() {
   document.getElementById('setRosterModal').classList.add('open');
-  const current = PLAYERS.filter(p => myPickIds.has(p.Overall)).map(p => p.Player).join('\n');
+  const current = PLAYERS.filter(p => myPickIds.has(normName(p.Player))).map(p => p.Player).join('\n');
   document.getElementById('rosterInput').value = current;
 }
 function closeModal() {
