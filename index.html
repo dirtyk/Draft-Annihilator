@@ -1210,7 +1210,11 @@ function updateDraftedFromPicks(rawPicks, rebuild) {
         name: ((pick.metadata?.first_name || pick.player?.first_name || '') + ' ' + (pick.metadata?.last_name || pick.player?.last_name || '')).trim(),
         round: pick.round || '?',
         slot: pick.draft_slot || pick.pick_no || '?',
-        picker: pick.picked_by || ''
+        picker: (() => {
+          const s = pick.draft_slot || pick.roster_id;
+          if (_lastMyRosterId && String(s) === String(_lastMyRosterId)) return 'Me';
+          return _slotToUser[s] || '';
+        })()
       })).filter(e => e.name);
   }
 
