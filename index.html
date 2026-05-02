@@ -1212,6 +1212,8 @@ function updateDraftedFromPicks(rawPicks, rebuild) {
         slot: pick.draft_slot || pick.pick_no || '?',
         picker: (() => {
           const s = pick.draft_slot || pick.roster_id;
+          const pb = pick.picked_by;
+          if (picks.indexOf(pick) < 3) console.log('pick fields: draft_slot=',pick.draft_slot,'roster_id=',pick.roster_id,'picked_by=',pb,'_lastMyRosterId=',_lastMyRosterId);
           if (_lastMyRosterId && String(s) === String(_lastMyRosterId)) return 'Me';
           return _slotToUser[s] || '';
         })()
