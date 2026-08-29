@@ -73,6 +73,9 @@ body{background:url('data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgG
 .pbadge.RB{background:rgba(34,197,94,.25);color:var(--rb);border:1px solid rgba(34,197,94,.4)}
 .pbadge.WR{background:rgba(0,212,255,.25);color:var(--wr);border:1px solid rgba(0,212,255,.4)}
 .pbadge.TE{background:rgba(168,85,247,.25);color:var(--te);border:1px solid rgba(168,85,247,.4)}
+.pbadge.FLEX{background:rgba(245,158,11,.22);color:var(--pick);border:1px solid rgba(245,158,11,.4)}
+.pbadge.SFLEX{background:rgba(124,58,237,.22);color:#a78bfa;border:1px solid rgba(124,58,237,.4)}
+.pbadge.BN{background:rgba(107,122,153,.15);color:var(--muted);border:1px solid var(--border)}
 .pname{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .psub{font-size:10px;color:var(--muted)}
 .prank{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:12px;color:var(--muted);text-align:center}
@@ -89,9 +92,11 @@ body{background:url('data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgG
 .rpanel{background:rgba(17,24,39,0.90);display:flex;flex-direction:column;overflow:hidden}
 .rpanel-hdr{background:rgba(17,24,39,0.91);border-bottom:1px solid var(--border);padding:9px 12px;display:flex;align-items:center;justify-content:space-between}
 .rplist{overflow-y:auto;flex:1;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
-.pick-row{display:grid;grid-template-columns:26px 1fr 36px;align-items:center;padding:7px 11px;border-bottom:1px solid rgba(42,53,80,.4);gap:7px}
+.pick-row{display:grid;grid-template-columns:42px 1fr 36px;align-items:center;padding:7px 11px;border-bottom:1px solid rgba(42,53,80,.4);gap:7px}
+.pick-row.pick-empty{opacity:.5}
 .pick-n{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;color:var(--pick)}
 .pick-name{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pick-name.pick-name-empty{color:var(--muted);font-style:italic;font-weight:600}
 .pick-meta{font-size:12px;color:var(--muted)}
 .empty-r{padding:28px 16px;text-align:center;color:var(--muted);font-size:12px;line-height:2}
 .rsum{border-top:1px solid var(--border);padding:8px 11px;background:rgba(26,34,54,0.91);display:flex;gap:5px;flex-wrap:wrap}
@@ -252,6 +257,10 @@ let pollTimer = null;
 let draftId = localStorage.getItem('kk_draftId') || null;
 let mySlot = parseInt(localStorage.getItem('kk_mySlot')) || null;
 let pendingPlayers = null;
+// Starting-lineup slot template pulled from the connected draft's own settings
+// (slots_qb/rb/wr/te/flex/bn) — mirrors Sleeper's own roster/starters view.
+let rosterSlots = JSON.parse(localStorage.getItem('kk_rosterSlots') || 'null');
+let benchSlotCount = parseInt(localStorage.getItem('kk_benchSlots')) || null;
 
 function save() {
   localStorage.setItem('kk_drafted', JSON.stringify([...drafted]));
@@ -294,11 +303,19 @@ function render() {
 }
 
 function renderRoster() {
-  const picks = PLAYERS.filter(p => mine.has(p.Overall));
+  // `mine` is a Set, and Sets iterate in insertion order — since applyPicks()
+  // only ever appends newly-discovered picks (processed pick_no-ascending) and
+  // manual adds append too, this order already IS draft order for free.
+  const picks = [...mine].map(id => PLAYERS.find(p => p.Overall === id)).filter(Boolean);
   const list = document.getElementById('rplist');
+
   if (!picks.length) {
     list.innerHTML = '<div class="empty-r">Click <strong style="color:var(--pick)">☆ Mine</strong> on any player<br>or use <strong>✎ My Team</strong> above</div>';
+  } else if (rosterSlots && rosterSlots.length) {
+    list.innerHTML = renderSlottedRoster(picks);
   } else {
+    // No known starting-lineup format yet (not connected to a Sleeper draft) —
+    // fall back to a flat draft-order list.
     list.innerHTML = picks.map((p,i) =>
       '<div class="pick-row">' +
       '<div class="pick-n">' + (i+1) + '</div>' +
@@ -312,6 +329,38 @@ function renderRoster() {
   document.getElementById('rsum').innerHTML = Object.entries(c).map(([pos,n]) =>
     '<span class="cbadge ' + pos + '">' + pos + ' ' + n + '</span>'
   ).join('');
+}
+
+// Fills starter slots (QB/RB/WR/TE/FLEX/...) in draft order, same rule Sleeper's
+// own draft-room roster view uses: the earliest-drafted eligible player takes the
+// earliest open matching slot; everyone else stacks onto the bench in pick order.
+function renderSlottedRoster(picks) {
+  const slots = rosterSlots.map(s => ({ ...s, player: null }));
+  const bench = [];
+  picks.forEach(p => {
+    const slot = slots.find(s => !s.player && s.eligible.includes(p.Position));
+    if (slot) slot.player = p; else bench.push(p);
+  });
+  const benchTotal = Math.max(benchSlotCount || 0, bench.length);
+
+  const row = (type, p) => {
+    if (!p) {
+      return '<div class="pick-row pick-empty">' +
+        '<div class="pbadge ' + type + '">' + type + '</div>' +
+        '<div class="pick-name pick-name-empty">Empty</div><div></div>' +
+      '</div>';
+    }
+    return '<div class="pick-row">' +
+      '<div class="pbadge ' + type + '">' + type + '</div>' +
+      '<div><div class="pick-name">' + p.Player + '</div><div class="pick-meta">' + p.Position + p["Positional Rank"] + ' · T' + p.Tier + '</div></div>' +
+      '<div class="pbadge ' + p.Position + '">' + p.Position + '</div>' +
+    '</div>';
+  };
+
+  let html = slots.map(s => row(s.type, s.player)).join('');
+  html += bench.map(p => row('BN', p)).join('');
+  for (let i = bench.length; i < benchTotal; i++) html += row('BN', null);
+  return html;
 }
 
 // ── ACTIONS ───────────────────────────────────────────────────────────────────
@@ -348,6 +397,8 @@ function resetAll() {
   if (!confirm('Reset entire board?')) return;
   stopPolling();
   draftId = null; mySlot = null;
+  rosterSlots = null; benchSlotCount = null;
+  localStorage.removeItem('kk_rosterSlots'); localStorage.removeItem('kk_benchSlots');
   document.getElementById('inDraft').value = '';
   document.getElementById('inSlot').value = '';
   document.getElementById('syncLink').style.display = 'none';
@@ -371,7 +422,7 @@ async function connectSleeper() {
   setLive('connecting');
   toast('🔌 Connecting...');
 
-  const success = await doFetch();
+  const [success] = await Promise.all([doFetch(), fetchRosterSettings()]);
   if (success) {
     startPolling();
   } else {
@@ -403,6 +454,40 @@ async function doFetch() {
   }
 }
 
+// ── ROSTER SLOT TEMPLATE (mirrors Sleeper's starters/bench layout) ────────────
+async function fetchRosterSettings() {
+  if (!draftId) return false;
+  try {
+    const url = 'https://api.sleeper.app/v1/draft/' + draftId + '?_=' + Date.now();
+    const r = await fetch(url, { cache: 'no-store' });
+    const d = await r.json();
+    if (!d || !d.settings) return false;
+    rosterSlots = buildRosterSlots(d.settings);
+    benchSlotCount = Number(d.settings.slots_bn) || 6;
+    localStorage.setItem('kk_rosterSlots', JSON.stringify(rosterSlots));
+    localStorage.setItem('kk_benchSlots', String(benchSlotCount));
+    renderRoster();
+    return true;
+  } catch(e) {
+    return false;
+  }
+}
+
+// Turns Sleeper's slots_qb/slots_rb/... counts into an ordered list of starter
+// slots, each tagged with which positions are eligible to fill it.
+function buildRosterSlots(settings) {
+  const n = k => Number(settings?.[k]) || 0;
+  const slots = [];
+  for (let i=0;i<n('slots_qb');i++)         slots.push({type:'QB',    eligible:['QB']});
+  for (let i=0;i<n('slots_rb');i++)         slots.push({type:'RB',    eligible:['RB']});
+  for (let i=0;i<n('slots_wr');i++)         slots.push({type:'WR',    eligible:['WR']});
+  for (let i=0;i<n('slots_te');i++)         slots.push({type:'TE',    eligible:['TE']});
+  for (let i=0;i<n('slots_wrrb_flex');i++)  slots.push({type:'FLEX',  eligible:['RB','WR']});
+  for (let i=0;i<n('slots_flex');i++)       slots.push({type:'FLEX',  eligible:['RB','WR','TE']});
+  for (let i=0;i<n('slots_super_flex');i++) slots.push({type:'SFLEX', eligible:['QB','RB','WR','TE']});
+  return slots;
+}
+
 function openPasteModal() {
   document.getElementById('pasteModal').classList.add('open');
   setTimeout(() => document.getElementById('pasteArea').focus(), 100);
@@ -416,7 +501,7 @@ function importPaste() {
   if (!Array.isArray(data) && typeof data === 'object') data = Object.values(data);
   if (!Array.isArray(data)) { toast('❌ Expected array of picks'); return; }
   applyPicks(data);
-  if (draftId) startPolling();
+  if (draftId) { startPolling(); if (!rosterSlots) fetchRosterSettings(); }
   closeModals();
   toast('✅ Imported ' + data.length + ' picks');
 }
@@ -709,7 +794,7 @@ if (draftId) {
   document.getElementById('syncLink').style.display = 'flex';
   document.getElementById('refreshBtn').style.display = 'inline-flex';
   setLive('connecting');
-  doFetch().then(ok => { if (ok) startPolling(); else setLive(false); });
+  Promise.all([doFetch(), fetchRosterSettings()]).then(([ok]) => { if (ok) startPolling(); else setLive(false); });
 }
 </script>
 </body>
