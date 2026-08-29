@@ -432,8 +432,13 @@ function applyPicks(data) {
 
     drafted.add(match.Overall);
 
-    // Mark as mine if roster_id matches my slot
-    if (mySlot && Number(pick.roster_id) === Number(mySlot)) {
+    // Mark as mine if this pick's draft slot (1..N draft position) matches my slot.
+    // Note: Sleeper's `roster_id` is often null for standalone/mock drafts not tied
+    // to a league, so `draft_slot` is the reliable field — it's also what the "My
+    // roster slot #" field actually asks the user for. Fall back to roster_id for
+    // league drafts where it's populated but happens to differ from draft_slot.
+    if (mySlot && (Number(pick.draft_slot) === Number(mySlot) ||
+                   (pick.roster_id != null && Number(pick.roster_id) === Number(mySlot)))) {
       mine.add(match.Overall);
     }
   });
