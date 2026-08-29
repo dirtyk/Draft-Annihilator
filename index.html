@@ -138,12 +138,13 @@ code{background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px
 <!-- CONNECT BAR -->
 <div class="cbar">
   <input id="inDraft" placeholder="Sleeper Draft ID" />
-  <button class="btn btn-purple btn-sm" onclick="getLink()">🔗 Get Picks URL</button>
-  <div id="syncLink">
-    <span>→</span>
-    <a id="syncAnchor" href="#" target="_blank" rel="noopener">Open picks JSON ↗</a>
-    <span style="color:var(--muted)">then Ctrl+A, Ctrl+C</span>
-    <button class="btn btn-sm" onclick="openPasteModal()">📋 Paste &amp; Import</button>
+  <input id="inSlot" placeholder="My roster slot #" type="number" min="1" max="20" style="width:130px" />
+  <button class="btn btn-purple btn-sm" onclick="connectSleeper()">⚡ Connect</button>
+  <button class="btn btn-outline btn-sm" onclick="refreshSleeper()" id="refreshBtn" style="display:none">↻ Refresh</button>
+  <button class="btn btn-outline btn-sm" onclick="openPasteModal()">📋 Paste JSON</button>
+  <div id="syncLink" style="display:none;align-items:center;gap:6px;font-size:12px;color:var(--muted)">
+    <a id="syncAnchor" href="#" target="_blank" rel="noopener" style="color:var(--accent);font-weight:700">Open picks JSON ↗</a>
+    <span>→ Ctrl+A, Ctrl+C → Paste JSON</span>
   </div>
   <button class="btn btn-gold btn-sm" onclick="openSetRoster()">✎ My Team</button>
   <button class="btn btn-outline btn-sm" onclick="document.getElementById('fileIn').click()">📂 Rankings</button>
@@ -242,6 +243,7 @@ let filter  = 'ALL';
 let hideMode = false;
 let pollTimer = null;
 let draftId = null;
+let mySlot = null;
 let pendingPlayers = null;
 
 function save() {
@@ -339,30 +341,47 @@ function resetAll() {
 }
 
 // ── SLEEPER SYNC ──────────────────────────────────────────────────────────────
-function getLink() {
+async function connectSleeper() {
   const did = document.getElementById('inDraft').value.trim();
   if (!did) { toast('⚠️ Enter a Draft ID'); return; }
   draftId = did;
+  mySlot = parseInt(document.getElementById('inSlot').value.trim()) || null;
+
+  // Show the manual fallback link always
   const url = 'https://api.sleeper.app/v1/draft/' + did + '/picks';
-  const sl = document.getElementById('syncLink');
   document.getElementById('syncAnchor').href = url;
-  document.getElementById('syncAnchor').textContent = url;
-  sl.style.display = 'flex';
-  // Try auto-fetch for when running locally
-  autoFetch(url);
+  document.getElementById('syncLink').style.display = 'flex';
+  document.getElementById('refreshBtn').style.display = 'inline-flex';
+
+  setLive('connecting');
+  toast('🔌 Connecting...');
+
+  const success = await doFetch();
+  if (success) {
+    startPolling();
+  } else {
+    setLive(false);
+    toast('⚠️ Auto-fetch blocked — click the link above, Ctrl+A, Ctrl+C, then Paste JSON');
+  }
 }
 
-async function autoFetch(url) {
+async function refreshSleeper() {
+  if (!draftId) { toast('⚠️ Not connected'); return; }
+  toast('🔄 Refreshing...');
+  await doFetch();
+}
+
+async function doFetch() {
   try {
+    const url = 'https://api.sleeper.app/v1/draft/' + draftId + '/picks';
     const r = await fetch(url);
     const text = await r.text();
-    if (text.trim().startsWith('<') || text.trim().startsWith('<!')) return; // CORS blocked
+    if (text.trim().startsWith('<') || text.trim().startsWith('!')) return false;
     const data = JSON.parse(text);
-    applyPicks(data);
-    startPolling();
-    toast('✅ Auto-synced ' + (Array.isArray(data) ? data.length : Object.keys(data).length) + ' picks');
+    applyPicks(Array.isArray(data) ? data : Object.values(data));
+    return true;
   } catch(e) {
-    // Silently fail — user will paste manually
+    return false;
   }
 }
 
@@ -385,10 +404,11 @@ function importPaste() {
 }
 
 function applyPicks(data) {
-  // Only update drafted set — never touch mine
-  const prevMine = new Set([...mine]);
+  // Update drafted from Sleeper picks. If mySlot is set, also update mine.
+  const hadMine = new Set([...mine]); // preserve manually-added picks
   drafted.clear();
-  mine.forEach(id => drafted.add(id)); // keep mine in drafted
+  mine.forEach(id => drafted.add(id)); // keep existing mine in drafted
+
   data.forEach(pick => {
     if (!pick) return;
     const fn = (pick.metadata?.first_name || pick.player?.first_name || '');
@@ -396,7 +416,14 @@ function applyPicks(data) {
     const name = (fn + ' ' + ln).trim();
     if (!name) return;
     const match = PLAYERS.find(p => namesMatch(p.Player, name));
-    if (match) drafted.add(match.Overall);
+    if (!match) return;
+
+    drafted.add(match.Overall);
+
+    // Mark as mine if roster_id matches my slot
+    if (mySlot && Number(pick.roster_id) === Number(mySlot)) {
+      mine.add(match.Overall);
+    }
   });
   save(); render(); renderRoster();
 }
@@ -404,24 +431,18 @@ function applyPicks(data) {
 // ── POLLING ───────────────────────────────────────────────────────────────────
 function startPolling() {
   if (pollTimer) clearInterval(pollTimer);
-  setLive(true);
+  setLive('live');
   pollTimer = setInterval(poll, 5000);
 }
 
 async function poll() {
   if (!draftId) return;
-  try {
-    const r = await fetch('https://api.sleeper.app/v1/draft/' + draftId + '/picks');
-    const text = await r.text();
-    if (text.trim().startsWith('<')) { stopPolling(); return; }
-    const data = JSON.parse(text);
-    const prev = drafted.size;
-    applyPicks(Array.isArray(data) ? data : Object.values(data));
-    const arr = Array.isArray(data) ? data : Object.values(data);
-    flashDot();
-    document.getElementById('pollLabel').textContent = arr.length + ' picks · ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    if (drafted.size > prev) toast('🔔 New pick made!');
-  } catch(e) { stopPolling(); }
+  const prev = drafted.size;
+  const ok = await doFetch();
+  if (!ok) { stopPolling(); return; }
+  flashDot();
+  document.getElementById('pollLabel').textContent = drafted.size + ' picks · ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  if (drafted.size > prev) toast('🔔 New pick made!');
 }
 
 function stopPolling() {
@@ -429,17 +450,26 @@ function stopPolling() {
   setLive(false);
 }
 
-function setLive(on) {
+function setLive(state) {
   const dot = document.getElementById('pollDot');
   const lbl = document.getElementById('pollLabel');
   const pill = document.getElementById('livePill');
-  dot.style.background = on ? 'var(--green)' : 'var(--muted)';
-  dot.style.boxShadow = on ? '0 0 8px var(--green)' : 'none';
-  lbl.style.color = on ? 'var(--green)' : 'var(--muted)';
-  lbl.textContent = on ? 'Live' : 'Not connected';
-  pill.style.borderColor = on ? 'var(--green)' : 'var(--border)';
-  if (on) dot.style.animation = 'pulse 1.5s infinite';
-  else dot.style.animation = 'none';
+  if (state === true || state === 'live') {
+    dot.style.background = 'var(--green)'; dot.style.boxShadow = '0 0 8px var(--green)';
+    lbl.style.color = 'var(--green)'; lbl.textContent = 'Live';
+    pill.style.borderColor = 'var(--green)';
+    dot.style.animation = 'pulse 1.5s infinite';
+  } else if (state === 'connecting') {
+    dot.style.background = 'var(--yellow)'; dot.style.boxShadow = '0 0 8px var(--yellow)';
+    lbl.style.color = 'var(--yellow)'; lbl.textContent = 'Connecting...';
+    pill.style.borderColor = 'var(--yellow)';
+    dot.style.animation = 'pulse 1s infinite';
+  } else {
+    dot.style.background = 'var(--muted)'; dot.style.boxShadow = 'none';
+    lbl.style.color = 'var(--muted)'; lbl.textContent = 'Not connected';
+    pill.style.borderColor = 'var(--border)';
+    dot.style.animation = 'none';
+  }
 }
 
 function flashDot() {
