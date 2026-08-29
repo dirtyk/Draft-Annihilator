@@ -243,13 +243,15 @@ let mine    = new Set(JSON.parse(localStorage.getItem('kk_mine')||'[]'));
 let filter  = 'ALL';
 let hideMode = false;
 let pollTimer = null;
-let draftId = null;
-let mySlot = null;
+let draftId = localStorage.getItem('kk_draftId') || null;
+let mySlot = parseInt(localStorage.getItem('kk_mySlot')) || null;
 let pendingPlayers = null;
 
 function save() {
   localStorage.setItem('kk_drafted', JSON.stringify([...drafted]));
   localStorage.setItem('kk_mine',    JSON.stringify([...mine]));
+  if (draftId) localStorage.setItem('kk_draftId', draftId); else localStorage.removeItem('kk_draftId');
+  if (mySlot) localStorage.setItem('kk_mySlot', mySlot); else localStorage.removeItem('kk_mySlot');
 }
 
 // ── RENDER BOARD ──────────────────────────────────────────────────────────────
@@ -338,6 +340,12 @@ function toggleHide() {
 
 function resetAll() {
   if (!confirm('Reset entire board?')) return;
+  stopPolling();
+  draftId = null; mySlot = null;
+  document.getElementById('inDraft').value = '';
+  document.getElementById('inSlot').value = '';
+  document.getElementById('syncLink').style.display = 'none';
+  document.getElementById('refreshBtn').style.display = 'none';
   drafted.clear(); mine.clear(); save(); render(); renderRoster(); toast('🔄 Reset');
 }
 
@@ -369,13 +377,16 @@ async function connectSleeper() {
 async function refreshSleeper() {
   if (!draftId) { toast('⚠️ Not connected'); return; }
   toast('🔄 Refreshing...');
-  await doFetch();
+  const ok = await doFetch();
+  if (!ok) toast('⚠️ Refresh failed — Sleeper unreachable or bad Draft ID');
 }
 
 async function doFetch() {
   try {
-    const url = 'https://api.sleeper.app/v1/draft/' + draftId + '/picks';
-    const r = await fetch(url);
+    // Sleeper's API serves this URL with `s-maxage=300`, so CDN/browser caches can
+    // return the same stale snapshot for up to 5 min. Bust the cache every call.
+    const url = 'https://api.sleeper.app/v1/draft/' + draftId + '/picks?_=' + Date.now();
+    const r = await fetch(url, { cache: 'no-store' });
     const text = await r.text();
     if (text.trim().startsWith('<') || text.trim().startsWith('!')) return false;
     const data = JSON.parse(text);
@@ -676,6 +687,18 @@ document.querySelectorAll('.overlay').forEach(el =>
 // ── INIT ──────────────────────────────────────────────────────────────────────
 render();
 renderRoster();
+
+// Restore a live Sleeper connection across page reloads (accidental refresh,
+// laptop sleep, etc. shouldn't silently drop you out of a live draft).
+if (draftId) {
+  document.getElementById('inDraft').value = draftId;
+  if (mySlot) document.getElementById('inSlot').value = mySlot;
+  document.getElementById('syncAnchor').href = 'https://api.sleeper.app/v1/draft/' + draftId + '/picks';
+  document.getElementById('syncLink').style.display = 'flex';
+  document.getElementById('refreshBtn').style.display = 'inline-flex';
+  setLive('connecting');
+  doFetch().then(ok => { if (ok) startPolling(); else setLive(false); });
+}
 </script>
 </body>
 </html>
