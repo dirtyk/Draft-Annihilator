@@ -444,7 +444,7 @@ function applyPicks(data) {
 function startPolling() {
   if (pollTimer) clearInterval(pollTimer);
   setLive('live');
-  pollTimer = setInterval(poll, 5000);
+  pollTimer = setInterval(poll, 2500);
 }
 
 async function poll() {
