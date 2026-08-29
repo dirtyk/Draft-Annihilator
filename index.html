@@ -46,6 +46,7 @@ body{background:url('data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgG
 
 /* MAIN */
 .main{display:grid;grid-template-columns:1fr 340px;height:calc(100vh - 54px - 52px);min-height:400px;width:100%}
+.main.claude-open{grid-template-columns:1fr 340px 340px}
 .rankings-panel{border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;background:rgba(10,14,26,0.88)}
 .panel-header{background:rgba(17,24,39,0.91);border-bottom:1px solid var(--border);padding:9px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .panel-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px;letter-spacing:2px;text-transform:uppercase}
@@ -77,6 +78,8 @@ body{background:url('data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgG
 .pbadge.SFLEX{background:rgba(124,58,237,.22);color:#a78bfa;border:1px solid rgba(124,58,237,.4)}
 .pbadge.BN{background:rgba(107,122,153,.15);color:var(--muted);border:1px solid var(--border)}
 .pname{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pname.clickable, .pick-name.clickable{cursor:pointer}
+.pname.clickable:hover, .pick-name.clickable:hover{color:var(--accent);text-decoration:underline}
 .psub{font-size:10px;color:var(--muted)}
 .prank{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:12px;color:var(--muted);text-align:center}
 .acell{display:flex;gap:3px}
@@ -90,6 +93,17 @@ body{background:url('data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgG
 
 /* ROSTER PANEL */
 .rpanel{background:rgba(17,24,39,0.90);display:flex;flex-direction:column;overflow:hidden}
+.cpanel{background:rgba(17,24,39,0.90);display:none;flex-direction:column;overflow:hidden;border-left:1px solid var(--border)}
+.cpanel.open{display:flex}
+.cplist{overflow-y:auto;flex:1;padding:10px;display:flex;flex-direction:column;gap:9px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.cmsg{padding:8px 10px;border-radius:8px;font-size:13px;line-height:1.55;max-width:92%}
+.cmsg.user{background:rgba(0,212,255,.12);border:1px solid rgba(0,212,255,.3);align-self:flex-end}
+.cmsg.assistant{background:var(--surface2);border:1px solid var(--border);align-self:flex-start}
+.cmsg.loading{color:var(--muted);font-style:italic}
+.cmsg.err{border-color:rgba(239,68,68,.5);color:var(--red)}
+.cinput-row{border-top:1px solid var(--border);padding:9px;display:flex;gap:6px}
+.cinput-row input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none}
+.cinput-row input:focus{border-color:var(--accent)}
 .rpanel-hdr{background:rgba(17,24,39,0.91);border-bottom:1px solid var(--border);padding:9px 12px;display:flex;align-items:center;justify-content:space-between}
 .rplist{overflow-y:auto;flex:1;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
 .pick-row{display:grid;grid-template-columns:42px 1fr 36px;align-items:center;padding:7px 11px;border-bottom:1px solid rgba(42,53,80,.4);gap:7px}
@@ -156,6 +170,8 @@ code{background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px
   <button class="btn btn-outline btn-sm" onclick="document.getElementById('fileIn').click()">📂 Rankings</button>
   <input type="file" id="fileIn" accept=".csv,.xlsx" style="display:none" onchange="onFileUpload(event)">
   <button class="btn btn-danger btn-sm" onclick="resetAll()">↺ Reset</button>
+  <button class="btn btn-outline btn-sm" id="claudeToggleBtn" onclick="toggleClaudePanel()">🤖 Analyst</button>
+  <button class="btn btn-outline btn-sm" onclick="openClaudeKeyModal()" title="Set your Anthropic API key">🔑</button>
 </div>
 
 <!-- MAIN -->
@@ -183,6 +199,32 @@ code{background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px
     </div>
     <div class="rsum" id="rsum">
       <span class="cbadge QB">QB 0</span><span class="cbadge RB">RB 0</span><span class="cbadge WR">WR 0</span><span class="cbadge TE">TE 0</span>
+    </div>
+  </div>
+  <div class="cpanel" id="cpanel">
+    <div class="rpanel-hdr">
+      <div class="panel-title">🤖 Fantasy Analyst</div>
+      <button class="btn btn-outline btn-sm" onclick="clearClaudeChat()">Clear</button>
+    </div>
+    <div class="cplist" id="cplist">
+      <div class="empty-r">Click a player's name for the latest news,<br>or ask anything below.</div>
+    </div>
+    <div class="cinput-row">
+      <input id="claudeInput" placeholder="Ask anything… e.g. who should I take?" onkeydown="if(event.key==='Enter')sendClaudeMsg()">
+      <button class="btn btn-sm" onclick="sendClaudeMsg()">Ask</button>
+    </div>
+  </div>
+</div>
+
+<!-- CLAUDE API KEY MODAL -->
+<div class="overlay" id="claudeKeyModal">
+  <div class="modal" style="max-width:440px">
+    <h2>🔑 Anthropic API Key</h2>
+    <p>Stored only in <strong>this browser's</strong> local storage — never committed to this site, never sent anywhere except directly to Anthropic's API. You're billed directly by Anthropic for what you use. Get a key at <code>platform.claude.com/settings/keys</code>.</p>
+    <input id="claudeKeyInput" type="password" placeholder="sk-ant-..." style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 11px;font-size:13px;outline:none;margin-bottom:10px">
+    <div class="mbtns">
+      <button class="btn" onclick="saveClaudeKey()">Save</button>
+      <button class="btn btn-outline" onclick="closeModals()">Cancel</button>
     </div>
   </div>
 </div>
@@ -261,6 +303,12 @@ let pendingPlayers = null;
 // (slots_qb/rb/wr/te/flex/bn) — mirrors Sleeper's own roster/starters view.
 let rosterSlots = JSON.parse(localStorage.getItem('kk_rosterSlots') || 'null');
 let benchSlotCount = parseInt(localStorage.getItem('kk_benchSlots')) || null;
+// Claude analyst panel — key lives only in this browser's localStorage, chat
+// history is intentionally NOT persisted (kept in memory only, per tab).
+let claudeApiKey = localStorage.getItem('kk_claude_key') || '';
+let claudeMessages = [];
+let claudeLoading = false;
+let claudePanelOpen = localStorage.getItem('kk_claude_open') === '1';
 
 function save() {
   localStorage.setItem('kk_drafted', JSON.stringify([...drafted]));
@@ -288,7 +336,7 @@ function render() {
     html += '<div class="' + rc + '">' +
       '<div class="rnum">' + p.Overall + '</div>' +
       '<div class="pbadge ' + p.Position + '">' + p.Position + '</div>' +
-      '<div><div class="pname">' + p.Player + '</div><div class="psub">Age ' + p.Age + '</div></div>' +
+      '<div><div class="pname clickable" data-player="' + escapeAttr(p.Player) + '" data-pos="' + p.Position + '">' + p.Player + '</div><div class="psub">Age ' + p.Age + '</div></div>' +
       '<div class="prank">' + p.Position + p["Positional Rank"] + '</div>' +
       '<div class="acell">' +
         '<button class="mbtn' + (m?' is-mine':'') + '" onclick="toggleMine(' + p.Overall + ')">' + (m?'★':'☆') + ' Mine</button>' +
@@ -319,7 +367,7 @@ function renderRoster() {
     list.innerHTML = picks.map((p,i) =>
       '<div class="pick-row">' +
       '<div class="pick-n">' + (i+1) + '</div>' +
-      '<div><div class="pick-name">' + p.Player + '</div><div class="pick-meta">' + p.Position + p["Positional Rank"] + ' · T' + p.Tier + '</div></div>' +
+      '<div><div class="pick-name clickable" data-player="' + escapeAttr(p.Player) + '" data-pos="' + p.Position + '">' + p.Player + '</div><div class="pick-meta">' + p.Position + p["Positional Rank"] + ' · T' + p.Tier + '</div></div>' +
       '<div class="pbadge ' + p.Position + '">' + p.Position + '</div>' +
       '</div>'
     ).join('');
@@ -352,7 +400,7 @@ function renderSlottedRoster(picks) {
     }
     return '<div class="pick-row">' +
       '<div class="pbadge ' + type + '">' + type + '</div>' +
-      '<div><div class="pick-name">' + p.Player + '</div><div class="pick-meta">' + p.Position + p["Positional Rank"] + ' · T' + p.Tier + '</div></div>' +
+      '<div><div class="pick-name clickable" data-player="' + escapeAttr(p.Player) + '" data-pos="' + p.Position + '">' + p.Player + '</div><div class="pick-meta">' + p.Position + p["Positional Rank"] + ' · T' + p.Tier + '</div></div>' +
       '<div class="pbadge ' + p.Position + '">' + p.Position + '</div>' +
     '</div>';
   };
@@ -486,6 +534,142 @@ function buildRosterSlots(settings) {
   for (let i=0;i<n('slots_flex');i++)       slots.push({type:'FLEX',  eligible:['RB','WR','TE']});
   for (let i=0;i<n('slots_super_flex');i++) slots.push({type:'SFLEX', eligible:['QB','RB','WR','TE']});
   return slots;
+}
+
+// ── CLAUDE FANTASY ANALYST ─────────────────────────────────────────────────────
+// Calls the Anthropic API directly from the browser with the user's own key
+// (stored only in localStorage, never in this file/repo). No backend — this is
+// a personal single-user tool, which is exactly the "internal tool, trusted
+// user" case Anthropic's own browser-usage guidance calls out as acceptable.
+function toggleClaudePanel() {
+  claudePanelOpen = !claudePanelOpen;
+  document.getElementById('cpanel').classList.toggle('open', claudePanelOpen);
+  document.querySelector('.main').classList.toggle('claude-open', claudePanelOpen);
+  document.getElementById('claudeToggleBtn').classList.toggle('btn-purple', claudePanelOpen);
+  localStorage.setItem('kk_claude_open', claudePanelOpen ? '1' : '0');
+}
+
+function openClaudeKeyModal() {
+  document.getElementById('claudeKeyInput').value = claudeApiKey;
+  document.getElementById('claudeKeyModal').classList.add('open');
+}
+
+function saveClaudeKey() {
+  claudeApiKey = document.getElementById('claudeKeyInput').value.trim();
+  localStorage.setItem('kk_claude_key', claudeApiKey);
+  closeModals();
+  if (claudeApiKey) {
+    toast('✅ Key saved to this browser');
+    if (!claudePanelOpen) toggleClaudePanel();
+  } else {
+    toast('🔑 Key cleared');
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function escapeAttr(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+}
+
+function clearClaudeChat() {
+  claudeMessages = [];
+  renderClaudeChat();
+}
+
+function sendClaudeMsg() {
+  const input = document.getElementById('claudeInput');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  callClaude(text);
+}
+
+function askAboutPlayer(name, pos) {
+  if (!claudePanelOpen) toggleClaudePanel();
+  callClaude('Give me the latest fantasy-relevant news, injury/health/recovery status, and role/usage outlook for ' + name + ' (' + pos + '). Be concise — I\'m reading this mid-round in a live draft.');
+}
+
+async function callClaude(userText) {
+  if (!claudeApiKey) { openClaudeKeyModal(); toast('⚠️ Set your Anthropic API key first'); return; }
+
+  claudeMessages.push({ role: 'user', content: userText });
+  claudeLoading = true;
+  renderClaudeChat();
+
+  // Give Claude the live board state so free-form questions ("who should I
+  // take") are actually draft-aware, not generic.
+  const topAvail = PLAYERS.filter(p => !drafted.has(p.Overall)).slice(0, 40)
+    .map(p => p.Overall + '. ' + p.Player + ' (' + p.Position + ', Tier ' + p.Tier + ')').join('\n');
+  const myRoster = [...mine].map(id => PLAYERS.find(p => p.Overall === id)).filter(Boolean)
+    .map(p => p.Player + ' (' + p.Position + ')').join(', ') || 'none yet';
+  const system = 'You are a sharp, concise fantasy football draft analyst helping during a LIVE draft — ' +
+    'keep answers short and skimmable (a few sentences or bullet points), the user is reading this under time pressure mid-pick.\n\n' +
+    'Top currently-available players by rank:\n' + topAvail + '\n\n' +
+    'The user\'s roster so far: ' + myRoster + '.\n\n' +
+    'When asked about a specific player, search the web for anything time-sensitive: latest news, injury/health/recovery status, ' +
+    'snap-count or role/usage trends, and current fantasy relevance. For strategy questions, reason from the board and roster above.';
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': claudeApiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-5',
+        max_tokens: 1536,
+        thinking: { type: 'adaptive' },
+        output_config: { effort: 'medium' },
+        system: system,
+        tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 3 }],
+        messages: claudeMessages
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || ('HTTP ' + res.status));
+    claudeMessages.push({ role: 'assistant', content: data.content });
+  } catch (e) {
+    claudeMessages.push({ role: 'assistant', content: '⚠️ ' + e.message, isError: true });
+  } finally {
+    claudeLoading = false;
+    renderClaudeChat();
+  }
+}
+
+function renderClaudeChat() {
+  const list = document.getElementById('cplist');
+  if (!claudeMessages.length && !claudeLoading) {
+    list.innerHTML = '<div class="empty-r">Click a player\'s name for the latest news,<br>or ask anything below.</div>';
+    return;
+  }
+  let html = claudeMessages.map(m => {
+    const isUser = m.role === 'user';
+    const text = Array.isArray(m.content)
+      ? m.content.filter(b => b.type === 'text').map(b => b.text).join('\n\n')
+      : String(m.content || '');
+    const cls = 'cmsg ' + (isUser ? 'user' : 'assistant') + (m.isError ? ' err' : '');
+    return '<div class="' + cls + '">' + escapeHtml(text).replace(/\n/g, '<br>') + '</div>';
+  }).join('');
+  if (claudeLoading) html += '<div class="cmsg assistant loading">Thinking…</div>';
+  list.innerHTML = html;
+  list.scrollTop = list.scrollHeight;
+}
+
+// Clicking a player name (board or roster) asks the analyst about them.
+// Delegated + data-attributes rather than inline onclick because player names
+// contain characters (Ja'Marr Chase, D'Andre Swift, ...) that would otherwise
+// break naive quote-escaping.
+function wireClaudePlayerClicks(containerId) {
+  document.getElementById(containerId).addEventListener('click', e => {
+    const el = e.target.closest('.pname, .pick-name');
+    if (!el || !el.dataset.player) return;
+    askAboutPlayer(el.dataset.player, el.dataset.pos || '');
+  });
 }
 
 function openPasteModal() {
@@ -790,6 +974,14 @@ document.querySelectorAll('.overlay').forEach(el =>
 // ── INIT ──────────────────────────────────────────────────────────────────────
 render();
 renderRoster();
+renderClaudeChat();
+wireClaudePlayerClicks('plist');
+wireClaudePlayerClicks('rplist');
+if (claudePanelOpen) {
+  document.getElementById('cpanel').classList.add('open');
+  document.querySelector('.main').classList.add('claude-open');
+  document.getElementById('claudeToggleBtn').classList.add('btn-purple');
+}
 
 // Restore a live Sleeper connection across page reloads (accidental refresh,
 // laptop sleep, etc. shouldn't silently drop you out of a live draft).
