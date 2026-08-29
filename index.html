@@ -507,10 +507,13 @@ function importPaste() {
 }
 
 function applyPicks(data) {
-  // Update drafted from Sleeper picks. If mySlot is set, also update mine.
-  const hadMine = new Set([...mine]); // preserve manually-added picks
   drafted.clear();
-  mine.forEach(id => drafted.add(id)); // keep existing mine in drafted
+
+  // Picks that belong to my slot *this fetch*, per Sleeper. Built fresh every
+  // time rather than merged into the old `mine`, so a stale entry (a leftover
+  // from testing a different slot number, a mis-click on the board) can never
+  // linger once connected — Sleeper is the system of record for the roster.
+  const syncMatches = new Set();
 
   data.forEach(pick => {
     if (!pick) return;
@@ -523,16 +526,19 @@ function applyPicks(data) {
 
     drafted.add(match.Overall);
 
-    // Mark as mine if this pick's draft slot (1..N draft position) matches my slot.
+    // This pick's draft slot (1..N draft position) matches my slot.
     // Note: Sleeper's `roster_id` is often null for standalone/mock drafts not tied
     // to a league, so `draft_slot` is the reliable field — it's also what the "My
     // roster slot #" field actually asks the user for. Fall back to roster_id for
     // league drafts where it's populated but happens to differ from draft_slot.
     if (mySlot && (Number(pick.draft_slot) === Number(mySlot) ||
                    (pick.roster_id != null && Number(pick.roster_id) === Number(mySlot)))) {
-      mine.add(match.Overall);
+      syncMatches.add(match.Overall);
     }
   });
+
+  if (mySlot) mine = syncMatches; // replace outright — see comment above
+  mine.forEach(id => drafted.add(id));
   save(); render(); renderRoster();
 }
 
