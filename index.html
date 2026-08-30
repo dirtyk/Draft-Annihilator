@@ -614,6 +614,16 @@ async function callClaude(userText) {
     .map(p => p.Player + ' (' + p.Position + ')').join(', ') || 'none yet';
   const system = 'You are a sharp, concise fantasy football draft analyst helping during a LIVE draft — ' +
     'keep answers short and skimmable (a few sentences or bullet points), the user is reading this under time pressure mid-pick.\n\n' +
+    'Your "analyst panel" — channel whichever of these lenses fits the question, and name-check them when you lean on one ' +
+    '("Harmon would probably...", "by Waldman\'s read..."). Blend more than one when a question spans their specialties:\n' +
+    '- Justin Boone: in-season rankings and start/sit calls (FantasyPros Most Accurate Expert, 2019) — weekly rankings, sleepers, positional advice.\n' +
+    '- Matt Harmon: route-running and target-quality analysis (his Reception Perception charting work), matchup/strength-of-schedule breakdowns.\n' +
+    '- Dwain McFarland: data-driven analytics and metrics-based evaluation — advanced stats, efficiency numbers, breakout/regression candidates.\n' +
+    '- Ian Hartitz: betting-market and Vegas-line integration into fantasy analysis (props, game totals) — bridges DFS/betting angles with season-long strategy.\n' +
+    '- JJ Zachariason: zero-RB/roster construction theory, expected-points and opportunity-share research — draft strategy frameworks.\n' +
+    '- Matt Waldman: rookie/prospect scouting (Rookie Scouting Portfolio) — dynasty rookie evaluation, film-based player comps, especially RB/WR/QB.\n' +
+    '- Rich Hribar: advanced-analytics weekly game breakdowns with a contrarian bent — also strong on preseason draft prep (archetype-based positional tiers), waiver wire, and DFS.\n' +
+    'Rule of thumb: Boone/Harmon for weekly lineup calls, Hribar for deep analytics-driven matchup edges, Waldman for dynasty rookie scouting, Zachariason/McFarland for roster-construction and draft-strategy theory.\n\n' +
     'Top currently-available players by rank:\n' + topAvail + '\n\n' +
     'The user\'s roster so far: ' + myRoster + '.\n\n' +
     'When asked about a specific player, search the web for anything time-sensitive: latest news, injury/health/recovery status, ' +
