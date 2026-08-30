@@ -171,7 +171,7 @@ code{background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px
   <input type="file" id="fileIn" accept=".csv,.xlsx" style="display:none" onchange="onFileUpload(event)">
   <button class="btn btn-danger btn-sm" onclick="resetAll()">↺ Reset</button>
   <button class="btn btn-outline btn-sm" id="claudeToggleBtn" onclick="toggleClaudePanel()">🤖 Analyst</button>
-  <button class="btn btn-outline btn-sm" onclick="openClaudeKeyModal()" title="Set your Anthropic API key">🔑</button>
+  <button class="btn btn-outline btn-sm" onclick="openClaudeKeyModal()" title="Set up the Fantasy Analyst proxy">⚙️</button>
 </div>
 
 <!-- MAIN -->
@@ -216,12 +216,13 @@ code{background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px
   </div>
 </div>
 
-<!-- CLAUDE API KEY MODAL -->
+<!-- CLAUDE ANALYST SETUP MODAL -->
 <div class="overlay" id="claudeKeyModal">
-  <div class="modal" style="max-width:440px">
-    <h2>🔑 Anthropic API Key</h2>
-    <p>Stored only in <strong>this browser's</strong> local storage — never committed to this site, never sent anywhere except directly to Anthropic's API. You're billed directly by Anthropic for what you use. Get a key at <code>platform.claude.com/settings/keys</code>.</p>
-    <input id="claudeKeyInput" type="password" placeholder="sk-ant-..." style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 11px;font-size:13px;outline:none;margin-bottom:10px">
+  <div class="modal" style="max-width:460px">
+    <h2>⚙️ Fantasy Analyst Setup</h2>
+    <p>GitHub Pages can't call Anthropic's API directly (no CORS from static sites), so this talks to a small proxy you deploy yourself — your real API key lives there as a server secret, never in this browser. See <code>worker/README.md</code> in the repo for the one-time setup.</p>
+    <input id="claudeWorkerUrlInput" placeholder="Worker URL — https://your-worker.workers.dev" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 11px;font-size:13px;outline:none;margin-bottom:8px">
+    <input id="claudeSecretInput" type="password" placeholder="Shared secret (APP_SHARED_SECRET)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 11px;font-size:13px;outline:none;margin-bottom:10px">
     <div class="mbtns">
       <button class="btn" onclick="saveClaudeKey()">Save</button>
       <button class="btn btn-outline" onclick="closeModals()">Cancel</button>
@@ -303,9 +304,13 @@ let pendingPlayers = null;
 // (slots_qb/rb/wr/te/flex/bn) — mirrors Sleeper's own roster/starters view.
 let rosterSlots = JSON.parse(localStorage.getItem('kk_rosterSlots') || 'null');
 let benchSlotCount = parseInt(localStorage.getItem('kk_benchSlots')) || null;
-// Claude analyst panel — key lives only in this browser's localStorage, chat
-// history is intentionally NOT persisted (kept in memory only, per tab).
-let claudeApiKey = localStorage.getItem('kk_claude_key') || '';
+// Claude analyst panel — talks to a small proxy (see worker/README.md) since
+// GitHub Pages can't call Anthropic's API directly (no CORS from static
+// sites). Only the proxy URL + a shared secret live here, in this browser's
+// localStorage; the real Anthropic key stays server-side in the proxy.
+// Chat history is intentionally NOT persisted (kept in memory only, per tab).
+let claudeWorkerUrl = localStorage.getItem('kk_claude_worker_url') || '';
+let claudeAppSecret = localStorage.getItem('kk_claude_secret') || '';
 let claudeMessages = [];
 let claudeLoading = false;
 let claudePanelOpen = localStorage.getItem('kk_claude_open') === '1';
@@ -537,10 +542,9 @@ function buildRosterSlots(settings) {
 }
 
 // ── CLAUDE FANTASY ANALYST ─────────────────────────────────────────────────────
-// Calls the Anthropic API directly from the browser with the user's own key
-// (stored only in localStorage, never in this file/repo). No backend — this is
-// a personal single-user tool, which is exactly the "internal tool, trusted
-// user" case Anthropic's own browser-usage guidance calls out as acceptable.
+// Anthropic's API doesn't allow direct browser requests (no CORS from static
+// sites), so this calls a small proxy (see worker/README.md) that holds the
+// real API key server-side. Only a Worker URL + shared secret live here.
 function toggleClaudePanel() {
   claudePanelOpen = !claudePanelOpen;
   document.getElementById('cpanel').classList.toggle('open', claudePanelOpen);
@@ -550,19 +554,22 @@ function toggleClaudePanel() {
 }
 
 function openClaudeKeyModal() {
-  document.getElementById('claudeKeyInput').value = claudeApiKey;
+  document.getElementById('claudeWorkerUrlInput').value = claudeWorkerUrl;
+  document.getElementById('claudeSecretInput').value = claudeAppSecret;
   document.getElementById('claudeKeyModal').classList.add('open');
 }
 
 function saveClaudeKey() {
-  claudeApiKey = document.getElementById('claudeKeyInput').value.trim();
-  localStorage.setItem('kk_claude_key', claudeApiKey);
+  claudeWorkerUrl = document.getElementById('claudeWorkerUrlInput').value.trim().replace(/\/+$/, '');
+  claudeAppSecret = document.getElementById('claudeSecretInput').value.trim();
+  localStorage.setItem('kk_claude_worker_url', claudeWorkerUrl);
+  localStorage.setItem('kk_claude_secret', claudeAppSecret);
   closeModals();
-  if (claudeApiKey) {
-    toast('✅ Key saved to this browser');
+  if (claudeWorkerUrl && claudeAppSecret) {
+    toast('✅ Analyst configured');
     if (!claudePanelOpen) toggleClaudePanel();
   } else {
-    toast('🔑 Key cleared');
+    toast('⚙️ Analyst settings cleared');
   }
 }
 
@@ -593,7 +600,7 @@ function askAboutPlayer(name, pos) {
 }
 
 async function callClaude(userText) {
-  if (!claudeApiKey) { openClaudeKeyModal(); toast('⚠️ Set your Anthropic API key first'); return; }
+  if (!claudeWorkerUrl || !claudeAppSecret) { openClaudeKeyModal(); toast('⚠️ Set up the Analyst proxy first'); return; }
 
   claudeMessages.push({ role: 'user', content: userText });
   claudeLoading = true;
@@ -613,12 +620,11 @@ async function callClaude(userText) {
     'snap-count or role/usage trends, and current fantasy relevance. For strategy questions, reason from the board and roster above.';
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch(claudeWorkerUrl, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-api-key': claudeApiKey,
-        'anthropic-version': '2023-06-01'
+        'X-App-Secret': claudeAppSecret
       },
       body: JSON.stringify({
         model: 'claude-opus-5',
