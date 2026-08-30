@@ -36,7 +36,7 @@ export default {
     }
 
     if (origin !== ALLOWED_ORIGIN) {
-      return new Response('Forbidden', { status: 403, headers: corsHeaders(origin) });
+      return new Response('Forbidden: bad origin (got ' + JSON.stringify(origin) + ')', { status: 403, headers: corsHeaders(origin) });
     }
 
     if (request.method !== 'POST') {
@@ -47,8 +47,11 @@ export default {
     // your Anthropic bill. This is NOT strong security (it's visible in the
     // page's JS to anyone who views source) — the real backstop is setting a
     // spend limit on your Anthropic API key in the Console. See the README.
-    if (!env.APP_SHARED_SECRET || request.headers.get('X-App-Secret') !== env.APP_SHARED_SECRET) {
-      return new Response('Forbidden', { status: 403, headers: corsHeaders(origin) });
+    if (!env.APP_SHARED_SECRET) {
+      return new Response('Forbidden: APP_SHARED_SECRET is not set on the Worker', { status: 403, headers: corsHeaders(origin) });
+    }
+    if (request.headers.get('X-App-Secret') !== env.APP_SHARED_SECRET) {
+      return new Response('Forbidden: shared secret mismatch', { status: 403, headers: corsHeaders(origin) });
     }
 
     let body;
@@ -66,6 +69,7 @@ export default {
           'content-type': 'application/json',
           'x-api-key': env.ANTHROPIC_API_KEY,
           'anthropic-version': '2023-06-01',
+          'user-agent': 'draft-annihilator-proxy/1.0 (Cloudflare Worker)',
         },
         body,
       });
@@ -77,6 +81,17 @@ export default {
     }
 
     const responseBody = await upstream.text();
+    if (!responseBody && !upstream.ok) {
+      // Anthropic's own errors always carry a JSON body (see their API docs),
+      // so an empty error body means something in front of Anthropic's app
+      // (a WAF/edge layer) rejected the request before it got that far --
+      // e.g. a malformed x-api-key header. Surface the bare status so it's
+      // distinguishable from a genuine Anthropic-issued error.
+      return new Response(JSON.stringify({ error: { message: 'Request was rejected before reaching Anthropic (empty error body, status ' + upstream.status + '). Check that ANTHROPIC_API_KEY is set correctly.' } }), {
+        status: upstream.status,
+        headers: { 'content-type': 'application/json', ...corsHeaders(origin) },
+      });
+    }
     return new Response(responseBody, {
       status: upstream.status,
       headers: { 'content-type': 'application/json', ...corsHeaders(origin) },
