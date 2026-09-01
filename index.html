@@ -63,11 +63,12 @@ body{background:url('data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgG
 
 .plist{overflow-y:auto;flex:1;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
 .tier-hdr{background:linear-gradient(90deg,rgba(35,45,66,0.93),rgba(35,45,66,0.05));border-bottom:1px solid var(--border);padding:4px 14px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);position:sticky;top:0;z-index:5}
-.prow{display:grid;grid-template-columns:40px 26px 1fr 48px 70px;align-items:center;padding:7px 14px;border-bottom:1px solid rgba(42,53,80,.4);gap:6px;transition:background .1s}
+.prow{display:grid;grid-template-columns:40px 26px 1fr 48px 96px;align-items:center;padding:7px 14px;border-bottom:1px solid rgba(42,53,80,.4);gap:6px;transition:background .1s}
 .prow:hover{background:var(--surface2)}
 .prow.drafted{opacity:.28}
 .prow.drafted .pname{text-decoration:line-through}
 .prow.mine{background:rgba(245,158,11,.06);border-left:3px solid var(--pick)}
+.prow.watching:not(.mine){background:rgba(0,212,255,.05);border-left:3px solid var(--accent)}
 .rnum{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;color:var(--muted);text-align:right}
 .pbadge{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:10px;padding:2px 4px;border-radius:3px;text-align:center}
 .pbadge.QB{background:rgba(255,107,53,.25);color:var(--qb);border:1px solid rgba(255,107,53,.4)}
@@ -90,6 +91,17 @@ body{background:url('data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgG
 .xbtn{background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--muted);font-size:10px;padding:2px 5px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;transition:all .15s}
 .xbtn:hover{border-color:var(--red);color:var(--red);background:rgba(239,68,68,.1)}
 .xbtn.is-x{border-color:rgba(239,68,68,.5);color:var(--red);background:rgba(239,68,68,.08)}
+.wbtn{background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--muted);font-size:10px;padding:2px 5px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;transition:all .15s;white-space:nowrap}
+.wbtn:hover{border-color:var(--accent);color:var(--accent);background:rgba(0,212,255,.1)}
+.wbtn.is-watch{border-color:var(--accent);color:var(--accent);background:rgba(0,212,255,.12)}
+.wbtn.is-fired{border-color:var(--red);color:var(--red);background:rgba(239,68,68,.12);animation:pulse 1.5s infinite}
+
+/* WATCH ALERT BANNER */
+.watch-banner{display:none;background:rgba(0,212,255,.1);border-bottom:2px solid var(--accent);padding:8px 16px;gap:8px;flex-wrap:wrap;align-items:center}
+.watch-banner.show{display:flex}
+.watch-pill{background:var(--surface2);border:1px solid var(--accent);border-radius:6px;padding:4px 6px 4px 10px;font-size:12px;display:flex;align-items:center;gap:8px}
+.watch-pill .wp-close{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 4px}
+.watch-pill .wp-close:hover{color:var(--red)}
 
 /* ROSTER PANEL */
 .rpanel{background:rgba(17,24,39,0.90);display:flex;flex-direction:column;overflow:hidden}
@@ -173,6 +185,9 @@ code{background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px
   <button class="btn btn-outline btn-sm" id="claudeToggleBtn" onclick="toggleClaudePanel()">🤖 Analyst</button>
   <button class="btn btn-outline btn-sm" onclick="openClaudeKeyModal()" title="Set up the Fantasy Analyst proxy">⚙️</button>
 </div>
+
+<!-- WATCH ALERT BANNER -->
+<div class="watch-banner" id="watchBanner"></div>
 
 <!-- MAIN -->
 <div class="main">
@@ -314,12 +329,22 @@ let claudeAppSecret = localStorage.getItem('kk_claude_secret') || '';
 let claudeMessages = [];
 let claudeLoading = false;
 let claudePanelOpen = localStorage.getItem('kk_claude_open') === '1';
+// Watchlist: Overall -> {round, fired}. `round` is the draft round to start
+// thinking about the player again; `fired` marks that the alert already went
+// off (so it doesn't re-fire every poll). Round is estimated from total picks
+// made / team count -- exact with a synced Sleeper draft's own team count,
+// a reasonable estimate otherwise.
+let watchlist = new Map(JSON.parse(localStorage.getItem('kk_watchlist') || '[]'));
+let teamsCount = parseInt(localStorage.getItem('kk_teamsCount')) || 12;
+let currentRound = 1;
 
 function save() {
   localStorage.setItem('kk_drafted', JSON.stringify([...drafted]));
   localStorage.setItem('kk_mine',    JSON.stringify([...mine]));
   if (draftId) localStorage.setItem('kk_draftId', draftId); else localStorage.removeItem('kk_draftId');
   if (mySlot) localStorage.setItem('kk_mySlot', mySlot); else localStorage.removeItem('kk_mySlot');
+  localStorage.setItem('kk_watchlist', JSON.stringify([...watchlist]));
+  localStorage.setItem('kk_teamsCount', String(teamsCount));
 }
 
 // ── RENDER BOARD ──────────────────────────────────────────────────────────────
@@ -337,7 +362,10 @@ function render() {
     }
     const d = drafted.has(p.Overall);
     const m = mine.has(p.Overall);
-    const rc = 'prow' + (d ? ' drafted' : m ? ' mine' : '');
+    const w = watchlist.get(p.Overall);
+    const rc = 'prow' + (d ? ' drafted' : m ? ' mine' : w ? ' watching' : '');
+    const wCls = w ? (w.fired ? ' is-fired' : ' is-watch') : '';
+    const wLabel = w ? ('👁' + w.round) : '👁';
     html += '<div class="' + rc + '">' +
       '<div class="rnum">' + p.Overall + '</div>' +
       '<div class="pbadge ' + p.Position + '">' + p.Position + '</div>' +
@@ -345,6 +373,7 @@ function render() {
       '<div class="prank">' + p.Position + p["Positional Rank"] + '</div>' +
       '<div class="acell">' +
         '<button class="mbtn' + (m?' is-mine':'') + '" onclick="toggleMine(' + p.Overall + ')">' + (m?'★':'☆') + ' Mine</button>' +
+        '<button class="wbtn' + wCls + '" onclick="toggleWatch(' + p.Overall + ')" title="Watch — alert me at a later round">' + wLabel + '</button>' +
         '<button class="xbtn' + (d?' is-x':'') + '" onclick="toggleDrafted(' + p.Overall + ')" title="Mark drafted">✕</button>' +
       '</div>' +
     '</div>';
@@ -420,13 +449,72 @@ function renderSlottedRoster(picks) {
 function toggleMine(id) {
   if (mine.has(id)) { mine.delete(id); toast('Removed from roster'); }
   else { mine.add(id); drafted.add(id); toast('✅ Added to roster'); }
-  save(); render(); renderRoster();
+  save(); render(); renderRoster(); checkWatchlistAlerts();
 }
 
 function toggleDrafted(id) {
   if (drafted.has(id)) { drafted.delete(id); mine.delete(id); toast('↩ Available'); }
   else { drafted.add(id); toast('❌ Drafted'); }
-  save(); render(); renderRoster();
+  save(); render(); renderRoster(); checkWatchlistAlerts();
+}
+
+// ── WATCHLIST / ROUND ALERTS ───────────────────────────────────────────────────
+function toggleWatch(id) {
+  const p = PLAYERS.find(x => x.Overall === id);
+  if (watchlist.has(id)) {
+    watchlist.delete(id);
+    toast('👁 Removed from watchlist');
+  } else {
+    const suggested = Math.max(1, currentRound + 1);
+    const input = prompt('Watch ' + (p ? p.Player : 'this player') + ' — alert me starting round:', String(suggested));
+    if (input === null) return; // cancelled
+    const round = parseInt(input);
+    if (!round || round < 1) { toast('⚠️ Enter a valid round number'); return; }
+    watchlist.set(id, { round, fired: false });
+    toast('👁 Watching ' + (p ? p.Player : '') + ' from round ' + round);
+  }
+  save(); render(); renderRoster(); checkWatchlistAlerts();
+}
+
+// Recomputes the current round from total picks made, checks every watched
+// player against it, fires a toast + adds to the persistent banner the first
+// time a player's round arrives, and auto-clears anyone who's been drafted
+// (by anyone) since the watch is moot at that point.
+function checkWatchlistAlerts() {
+  currentRound = Math.max(1, Math.ceil(drafted.size / teamsCount));
+  let changed = false;
+  [...watchlist.entries()].forEach(([id, entry]) => {
+    if (drafted.has(id)) { watchlist.delete(id); changed = true; return; }
+    if (!entry.fired && currentRound >= entry.round) {
+      const p = PLAYERS.find(x => x.Overall === id);
+      if (p) toast('👁 Round ' + currentRound + ' — don\'t forget ' + p.Player + ' (' + p.Position + ')!');
+      entry.fired = true;
+      changed = true;
+    }
+  });
+  if (changed) save();
+  renderWatchBanner();
+}
+
+function dismissWatch(id) {
+  watchlist.delete(id);
+  save();
+  render(); renderRoster();
+  renderWatchBanner();
+}
+
+function renderWatchBanner() {
+  const banner = document.getElementById('watchBanner');
+  const fired = [...watchlist.entries()]
+    .filter(([id, e]) => e.fired)
+    .map(([id, e]) => ({ id, round: e.round, p: PLAYERS.find(x => x.Overall === id) }))
+    .filter(x => x.p);
+  if (!fired.length) { banner.classList.remove('show'); banner.innerHTML = ''; return; }
+  banner.innerHTML = fired.map(x =>
+    '<div class="watch-pill">👁 Rd' + x.round + ' — <strong>' + x.p.Player + '</strong> (' + x.p.Position + ')' +
+    '<button class="wp-close" onclick="dismissWatch(' + x.id + ')" title="Dismiss">✕</button></div>'
+  ).join('');
+  banner.classList.add('show');
 }
 
 function setFilter(pos) {
@@ -451,12 +539,13 @@ function resetAll() {
   stopPolling();
   draftId = null; mySlot = null;
   rosterSlots = null; benchSlotCount = null;
+  watchlist.clear(); currentRound = 1;
   localStorage.removeItem('kk_rosterSlots'); localStorage.removeItem('kk_benchSlots');
   document.getElementById('inDraft').value = '';
   document.getElementById('inSlot').value = '';
   document.getElementById('syncLink').style.display = 'none';
   document.getElementById('refreshBtn').style.display = 'none';
-  drafted.clear(); mine.clear(); save(); render(); renderRoster(); toast('🔄 Reset');
+  drafted.clear(); mine.clear(); save(); render(); renderRoster(); renderWatchBanner(); toast('🔄 Reset');
 }
 
 // ── SLEEPER SYNC ──────────────────────────────────────────────────────────────
@@ -517,8 +606,10 @@ async function fetchRosterSettings() {
     if (!d || !d.settings) return false;
     rosterSlots = buildRosterSlots(d.settings);
     benchSlotCount = Number(d.settings.slots_bn) || 6;
+    if (d.settings.teams) teamsCount = Number(d.settings.teams);
     localStorage.setItem('kk_rosterSlots', JSON.stringify(rosterSlots));
     localStorage.setItem('kk_benchSlots', String(benchSlotCount));
+    localStorage.setItem('kk_teamsCount', String(teamsCount));
     renderRoster();
     return true;
   } catch(e) {
@@ -739,7 +830,7 @@ function applyPicks(data) {
 
   if (mySlot) mine = syncMatches; // replace outright — see comment above
   mine.forEach(id => drafted.add(id));
-  save(); render(); renderRoster();
+  save(); render(); renderRoster(); checkWatchlistAlerts();
 }
 
 // ── POLLING ───────────────────────────────────────────────────────────────────
@@ -808,7 +899,7 @@ function applyRoster() {
     if (m) { mine.add(m.Overall); drafted.add(m.Overall); }
     else bad.push(line);
   });
-  save(); render(); renderRoster(); closeModals();
+  save(); render(); renderRoster(); checkWatchlistAlerts(); closeModals();
   if (bad.length) toast('⚠️ Not found: ' + bad.join(', '));
   else toast('✅ Roster set — ' + lines.length + ' players');
 }
@@ -840,7 +931,7 @@ function renderAddResults() {
 
 function quickAdd(id) {
   mine.add(id); drafted.add(id);
-  save(); render(); renderRoster(); renderAddResults();
+  save(); render(); renderRoster(); renderAddResults(); checkWatchlistAlerts();
   toast('✅ Added');
 }
 
@@ -904,14 +995,16 @@ function applyUpload() {
   if (!pendingPlayers) return;
   const dNames = new Set([...drafted].map(id => { const p=PLAYERS.find(x=>x.Overall===id); return p?norm(p.Player):null; }).filter(Boolean));
   const mNames = new Set([...mine].map(id => { const p=PLAYERS.find(x=>x.Overall===id); return p?norm(p.Player):null; }).filter(Boolean));
+  const wByName = new Map([...watchlist].map(([id, entry]) => { const p=PLAYERS.find(x=>x.Overall===id); return p?[norm(p.Player), entry]:null; }).filter(Boolean));
   PLAYERS.splice(0, PLAYERS.length, ...pendingPlayers);
-  drafted.clear(); mine.clear();
+  drafted.clear(); mine.clear(); watchlist.clear();
   PLAYERS.forEach(p => {
     if (dNames.has(norm(p.Player))) drafted.add(p.Overall);
     if (mNames.has(norm(p.Player))) mine.add(p.Overall);
+    if (wByName.has(norm(p.Player))) watchlist.set(p.Overall, wByName.get(norm(p.Player)));
   });
   localStorage.setItem('kk_players', JSON.stringify(PLAYERS));
-  save(); render(); renderRoster(); closeModals();
+  save(); render(); renderRoster(); renderWatchBanner(); closeModals();
   toast('✅ Rankings updated — ' + PLAYERS.length + ' players');
   pendingPlayers = null;
 }
@@ -991,6 +1084,7 @@ document.querySelectorAll('.overlay').forEach(el =>
 render();
 renderRoster();
 renderClaudeChat();
+checkWatchlistAlerts(); // establishes currentRound and shows any already-due alerts
 wireClaudePlayerClicks('plist');
 wireClaudePlayerClicks('rplist');
 if (claudePanelOpen) {
