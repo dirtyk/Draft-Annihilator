@@ -20,7 +20,7 @@ function corsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin': origin === ALLOWED_ORIGIN ? origin : 'null',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-App-Secret',
+    'Access-Control-Allow-Headers': 'Content-Type, X-App-Secret, anthropic-beta',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
   };
@@ -61,16 +61,23 @@ export default {
       return new Response('Bad request', { status: 400, headers: corsHeaders(origin) });
     }
 
+    // Forward the anthropic-beta header when the client sets one (e.g. Quick
+    // mode's Fast Mode request) -- Anthropic beta features are opted into per
+    // request via this header, so pass through whatever the client asked for.
+    const upstreamHeaders = {
+      'content-type': 'application/json',
+      'x-api-key': env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'user-agent': 'draft-annihilator-proxy/1.0 (Cloudflare Worker)',
+    };
+    const beta = request.headers.get('anthropic-beta');
+    if (beta) upstreamHeaders['anthropic-beta'] = beta;
+
     let upstream;
     try {
       upstream = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': env.ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-          'user-agent': 'draft-annihilator-proxy/1.0 (Cloudflare Worker)',
-        },
+        headers: upstreamHeaders,
         body,
       });
     } catch (e) {

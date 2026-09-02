@@ -219,6 +219,7 @@ code{background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px
   <div class="cpanel" id="cpanel">
     <div class="rpanel-hdr">
       <div class="panel-title">🤖 Fantasy Analyst</div>
+      <button class="btn btn-outline btn-sm" id="claudeQuickBtn" onclick="toggleClaudeQuick()" title="Faster, terser answers for live-pick lookups — normal mode is more thorough, better for advance scouting">⚡ Quick</button>
       <button class="btn btn-outline btn-sm" onclick="clearClaudeChat()">Clear</button>
     </div>
     <div class="cplist" id="cplist">
@@ -329,6 +330,10 @@ let claudeAppSecret = localStorage.getItem('kk_claude_secret') || '';
 let claudeMessages = [];
 let claudeLoading = false;
 let claudePanelOpen = localStorage.getItem('kk_claude_open') === '1';
+// Quick mode: lower effort, one web search max, shorter answer -- for
+// live-pick lookups where speed beats thoroughness. Off by default (normal
+// mode is better for advance scouting).
+let claudeQuick = localStorage.getItem('kk_claude_quick') === '1';
 // Watchlist: Overall -> {round, fired}. `round` is the draft round to start
 // thinking about the player again; `fired` marks that the alert already went
 // off (so it doesn't re-fire every poll). Round is estimated from total picks
@@ -657,6 +662,13 @@ function toggleClaudePanel() {
   localStorage.setItem('kk_claude_open', claudePanelOpen ? '1' : '0');
 }
 
+function toggleClaudeQuick() {
+  claudeQuick = !claudeQuick;
+  document.getElementById('claudeQuickBtn').classList.toggle('btn-gold', claudeQuick);
+  localStorage.setItem('kk_claude_quick', claudeQuick ? '1' : '0');
+  toast(claudeQuick ? '⚡ Quick mode — faster, terser answers' : '🐢 Normal mode — more thorough');
+}
+
 function openClaudeKeyModal() {
   document.getElementById('claudeWorkerUrlInput').value = claudeWorkerUrl;
   document.getElementById('claudeSecretInput').value = claudeAppSecret;
@@ -731,24 +743,29 @@ async function callClaude(userText) {
     'Top currently-available players by rank:\n' + topAvail + '\n\n' +
     'The user\'s roster so far: ' + myRoster + '.\n\n' +
     'When asked about a specific player, search the web for anything time-sensitive: latest news, injury/health/recovery status, ' +
-    'snap-count or role/usage trends, and current fantasy relevance. For strategy questions, reason from the board and roster above.';
+    'snap-count or role/usage trends, and current fantasy relevance. For strategy questions, reason from the board and roster above.' +
+    (claudeQuick ? '\n\nSPEED MODE: you\'re on the clock mid-pick — answer in 1-3 short sentences, verdict first, no preamble.' : '');
+
+  const headers = { 'content-type': 'application/json', 'X-App-Secret': claudeAppSecret };
+  const body = {
+    model: 'claude-opus-5',
+    max_tokens: claudeQuick ? 400 : 1536,
+    thinking: { type: 'adaptive' },
+    output_config: { effort: claudeQuick ? 'low' : 'medium' },
+    system: system,
+    tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: claudeQuick ? 1 : 3 }],
+    messages: claudeMessages
+  };
+  // Note: Anthropic's Fast Mode (speed:'fast') would help here too, but it
+  // requires a rate-limit allowance most accounts don't have by default
+  // (fails outright with a 429 rather than degrading gracefully) -- skipped
+  // for reliability. Effort/search-count/token-length below do the real work.
 
   try {
     const res = await fetch(claudeWorkerUrl, {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'X-App-Secret': claudeAppSecret
-      },
-      body: JSON.stringify({
-        model: 'claude-opus-5',
-        max_tokens: 1536,
-        thinking: { type: 'adaptive' },
-        output_config: { effort: 'medium' },
-        system: system,
-        tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 3 }],
-        messages: claudeMessages
-      })
+      headers: headers,
+      body: JSON.stringify(body)
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data?.error?.message || ('HTTP ' + res.status));
@@ -1105,6 +1122,7 @@ if (claudePanelOpen) {
   document.querySelector('.main').classList.add('claude-open');
   document.getElementById('claudeToggleBtn').classList.add('btn-purple');
 }
+if (claudeQuick) document.getElementById('claudeQuickBtn').classList.add('btn-gold');
 
 // Restore a live Sleeper connection across page reloads (accidental refresh,
 // laptop sleep, etc. shouldn't silently drop you out of a live draft).
