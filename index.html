@@ -144,6 +144,23 @@ body{background:url('data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgG
 #addResults .ar:hover{background:var(--surface2)}
 code{background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px;color:var(--yellow)}
 
+/* DRAFT HIM / NOT HIM */
+#dhResults .ar{display:grid;grid-template-columns:26px 1fr 60px;align-items:center;padding:7px 4px;border-bottom:1px solid var(--border);gap:7px;cursor:pointer}
+#dhResults .ar:hover{background:var(--surface2)}
+.dh-chip{background:var(--surface2);border:1px solid var(--accent);border-radius:6px;padding:4px 6px 4px 10px;font-size:12px;display:flex;align-items:center;gap:8px}
+.dh-chip button{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 4px}
+.dh-chip button:hover{color:var(--red)}
+.dh-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px}
+.dh-card.recommended{border-color:var(--green);background:rgba(34,197,94,.08)}
+.dh-card-hdr{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px}
+.dh-stat{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;padding:2px 0}
+.dh-stat strong{color:var(--text)}
+.dh-need-hard{color:var(--green);font-weight:700}
+.dh-need-filled{color:var(--yellow);font-weight:700}
+.dh-need-over{color:var(--red);font-weight:700}
+.dh-verdict{background:rgba(245,158,11,.1);border:1px solid var(--pick);border-radius:8px;padding:10px 12px;margin-top:6px;font-size:13px;line-height:1.5}
+.dh-verdict.loading{color:var(--muted);font-style:italic}
+
 /* TOAST */
 .toast{position:fixed;bottom:18px;right:18px;background:var(--surface3);border:1px solid var(--accent);border-radius:8px;padding:9px 16px;font-size:13px;z-index:999;opacity:0;transform:translateY(8px);transition:all .25s;pointer-events:none;max-width:300px}
 .toast.show{opacity:1;transform:translateY(0)}
@@ -184,6 +201,7 @@ code{background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px
   <button class="btn btn-danger btn-sm" onclick="resetAll()">↺ Reset</button>
   <button class="btn btn-outline btn-sm" id="claudeToggleBtn" onclick="toggleClaudePanel()">🤖 Analyst</button>
   <button class="btn btn-outline btn-sm" onclick="openClaudeKeyModal()" title="Set up the Fantasy Analyst proxy">⚙️</button>
+  <button class="btn btn-gold btn-sm" onclick="openDraftHimModal()">⚖️ Draft Him?</button>
 </div>
 
 <!-- WATCH ALERT BANNER -->
@@ -279,6 +297,23 @@ code{background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px
     <div class="madd"><input id="addSearch" placeholder="Search player..." oninput="renderAddResults()"></div>
     <div id="addResults" style="max-height:280px;overflow-y:auto"></div>
     <div class="mbtns"><button class="btn btn-outline" onclick="closeModals()">Done</button></div>
+  </div>
+</div>
+
+<!-- DRAFT HIM / NOT HIM MODAL -->
+<div class="overlay" id="drafthimModal">
+  <div class="modal" style="max-width:560px">
+    <h2>⚖️ Draft Him / Not Him</h2>
+    <p>Scarcity-adjusted, not just best-player-available. Add 2+ players to compare — the numbers (survival odds, tier depth, roster need) are computed instantly in JS; only the one-line "why" comes from Claude.</p>
+    <div class="madd"><input id="dhSearch" placeholder="Search player to add..." oninput="renderDhResults()"></div>
+    <div id="dhResults" style="max-height:180px;overflow-y:auto;margin-bottom:10px"></div>
+    <div id="dhChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
+    <div class="mbtns" style="justify-content:space-between;margin-bottom:10px">
+      <span id="dhContext" style="font-size:11px;color:var(--muted)"></span>
+      <button class="btn btn-gold btn-sm" onclick="runDraftHimCompare()">Compare</button>
+    </div>
+    <div id="dhOutput"></div>
+    <div class="mbtns"><button class="btn btn-outline" onclick="closeModals()">Close</button></div>
   </div>
 </div>
 
@@ -648,6 +683,286 @@ function buildRosterSlots(settings) {
   for (let i=0;i<n('slots_flex');i++)       slots.push({type:'FLEX',  eligible:['RB','WR','TE']});
   for (let i=0;i<n('slots_super_flex');i++) slots.push({type:'SFLEX', eligible:['QB','RB','WR','TE']});
   return slots;
+}
+
+// ── DRAFT HIM / NOT HIM — DECISION ENGINE ───────────────────────────────────────
+// All numbers here are computed deterministically in JS -- no LLM involved in the
+// math. Ported from the companion "Mock Draft Sim" project's bot-pick simulation
+// (same repo family, sibling GitHub Pages site): that tool doesn't actually use a
+// literal per-player ADP standard deviation -- FantasyFootballCalculator's API
+// does return one (`stdev`), but the sim discards it and instead models "reach
+// risk" via a Monte Carlo simulation that repeatedly drafts from a rank/tier-
+// weighted window per round. That's what's ported here, adapted to this app's
+// PLAYERS schema (Overall rank standing in for ADP order, Tier reused as-is)
+// since Draft-Annihilator has no live ADP feed of its own.
+
+// Default starting-lineup shape used when NOT connected to a live Sleeper draft
+// (no real rosterSlots to read yet). Edit these numbers for a different format --
+// once connected, the real league's settings (already fetched for My Roster) are
+// used instead, so this is just the manual/offline fallback.
+const DEFAULT_STARTER_CONFIG = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1 };
+
+// Which slot (1..teams) is on the clock at a given overall pick number, in a
+// standard snake draft.
+function snakeSlotAtPick(overallPick, teams) {
+  const round = Math.ceil(overallPick / teams);
+  const posInRound = overallPick - (round - 1) * teams; // 1..teams, left-to-right
+  return (round % 2 === 1) ? posInRound : (teams - posInRound + 1);
+}
+
+// How many OTHER teams' picks happen between right now and my next turn.
+// Uses `drafted.size` as the current overall pick count (accurate while synced
+// to a live draft, which is this tool's intended use).
+function picksUntilMyNextTurn() {
+  const slot = mySlot || 1; // fall back to slot 1 if not connected -- still lets the tool run
+  let p = drafted.size + 1;
+  if (snakeSlotAtPick(p, teamsCount) === slot) p++; // I'm on the clock now -- count from after this pick
+  let count = 0;
+  while (snakeSlotAtPick(p, teamsCount) !== slot && count <= teamsCount * 3) { count++; p++; }
+  return count;
+}
+
+// Same round/window/sigma schedule as the Mock Draft Sim -- later rounds get a
+// wider, flatter window (more reach/skip randomness), matching real draft
+// behavior where value-based sniping is common early and dries up late.
+function pickWindowAndSigma(round) {
+  if (round <= 2) return { window: 4, sigma: 2 };
+  if (round <= 5) return { window: 6, sigma: 4 };
+  if (round <= 9) return { window: 9, sigma: 7 };
+  return { window: 14, sigma: 12 };
+}
+
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// Simulates one "other team's pick" from a remaining pool: same-tier players are
+// treated as roughly interchangeable, next-tier reaches get rarer the deeper the
+// tier goes, and within the resulting candidate set, earlier-ranked players are
+// exponentially more likely to be taken (softmax-style decay by rank position).
+function simulateOnePick(pool, round, rng) {
+  if (!pool.length) return undefined;
+  const { window, sigma } = pickWindowAndSigma(round);
+  const topTier = pool[0].Tier;
+  const sameTier = pool.filter(p => p.Tier === topTier);
+  const nextTierAllowance = Math.min(Math.max(window - sameTier.length, 0), 6);
+  const nextTier = pool.filter(p => p.Tier !== topTier).slice(0, nextTierAllowance);
+  let candidates = sameTier.concat(nextTier);
+  if (!candidates.length) candidates = pool.slice(0, Math.max(window, 3));
+
+  const weights = candidates.map((p, idx) => Math.exp(-idx / (sigma / 2 + 1)) + 0.02);
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = rng() * total;
+  for (let i = 0; i < candidates.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return candidates[i];
+  }
+  return candidates[candidates.length - 1];
+}
+
+// Monte Carlo "gone by my next pick" probabilities. Returns Overall -> survival
+// probability (0..1) for each of `candidates`, simulating `steps` other teams'
+// picks `iterations` times. 400-600 iterations over a few hundred remaining
+// players runs in well under 100ms in-browser -- no perceptible delay.
+function survivalProbabilities(candidates, steps, iterations = 500) {
+  const survives = {};
+  candidates.forEach(c => survives[c.Overall] = 0);
+  if (steps <= 0) { candidates.forEach(c => survives[c.Overall] = 1); return survives; }
+
+  const basePool = PLAYERS.filter(p => !drafted.has(p.Overall)).sort((a, b) => a.Overall - b.Overall);
+  const rng = mulberry32((Date.now() * 7 + drafted.size + 1) & 0xffffffff);
+  const startPick = drafted.size + 1;
+
+  for (let it = 0; it < iterations; it++) {
+    let pool = basePool;
+    let removed = null;
+    for (let s = 0; s < steps; s++) {
+      const round = Math.max(1, Math.ceil((startPick + s) / teamsCount));
+      const pick = simulateOnePick(pool, round, rng);
+      if (!pick) break;
+      if (!removed) removed = new Set();
+      removed.add(pick.Overall);
+      pool = pool.filter(p => p.Overall !== pick.Overall);
+    }
+    candidates.forEach(c => { if (!removed || !removed.has(c.Overall)) survives[c.Overall]++; });
+  }
+  candidates.forEach(c => survives[c.Overall] = survives[c.Overall] / iterations);
+  return survives;
+}
+
+// How many undrafted players remain in this player's own tier at his position.
+function tierDepthRemaining(p) {
+  return PLAYERS.filter(x => x.Position === p.Position && x.Tier === p.Tier && !drafted.has(x.Overall)).length;
+}
+
+// Starting-lineup slots at a position: live rosterSlots when connected to a
+// Sleeper draft, else DEFAULT_STARTER_CONFIG. FLEX-eligible slots count toward
+// each position they accept, split evenly, so a RB/WR flex nudges both.
+function starterSlotsForPosition(position) {
+  if (rosterSlots && rosterSlots.length) {
+    let count = 0;
+    rosterSlots.forEach(s => { if (s.eligible.includes(position)) count += 1 / s.eligible.length; });
+    return count;
+  }
+  const base = DEFAULT_STARTER_CONFIG[position] || 0;
+  const flexShare = position !== 'QB' ? (DEFAULT_STARTER_CONFIG.FLEX || 0) / 3 : 0; // RB/WR/TE share the flex
+  return base + flexShare;
+}
+
+// { filled, slots, need } for one position, from `mine`.
+function rosterNeedForPosition(position) {
+  const filled = [...mine].filter(id => { const p = PLAYERS.find(x => x.Overall === id); return p && p.Position === position; }).length;
+  const slots = starterSlotsForPosition(position);
+  let need;
+  if (filled < slots) need = 'hard need';
+  else if (filled < slots + 1) need = 'filled';
+  else need = 'over-filled';
+  return { filled, slots: Math.round(slots * 10) / 10, need };
+}
+
+// Full stat bundle for one player, ready to feed the narrator model or render
+// directly. This is the single entry point the UI should call.
+function evaluatePlayerForDecision(p, steps) {
+  const survival = survivalProbabilities([p], steps)[p.Overall];
+  const tierLeft = tierDepthRemaining(p);
+  const need = rosterNeedForPosition(p.Position);
+  return {
+    player: p,
+    survivalPct: Math.round(survival * 100),
+    tierLeft,
+    roster: need
+  };
+}
+
+// ── DRAFT HIM / NOT HIM — UI ─────────────────────────────────────────────────────
+let dhSelected = []; // Overall ids of players currently being compared
+
+function openDraftHimModal() {
+  dhSelected = [];
+  document.getElementById('dhSearch').value = '';
+  document.getElementById('dhOutput').innerHTML = '';
+  renderDhResults();
+  renderDhChips();
+  updateDhContext();
+  document.getElementById('drafthimModal').classList.add('open');
+  setTimeout(() => document.getElementById('dhSearch').focus(), 100);
+}
+
+function updateDhContext() {
+  const steps = picksUntilMyNextTurn();
+  document.getElementById('dhContext').textContent =
+    steps + ' pick' + (steps === 1 ? '' : 's') + ' until your next turn' + (draftId ? ' (round ~' + currentRound + ')' : ' (not connected — using slot 1 default)');
+}
+
+function renderDhResults() {
+  const q = document.getElementById('dhSearch').value.toLowerCase().trim();
+  const box = document.getElementById('dhResults');
+  if (!q) { box.innerHTML = ''; return; }
+  const res = PLAYERS.filter(p => p.Player.toLowerCase().includes(q) && !drafted.has(p.Overall) && !dhSelected.includes(p.Overall)).slice(0, 8);
+  box.innerHTML = res.length ? res.map(p =>
+    '<div class="ar" onclick="addDhPlayer(' + p.Overall + ')">' +
+      '<span class="pbadge ' + p.Position + '">' + p.Position + '</span>' +
+      '<span style="font-family:\'Barlow Condensed\',sans-serif;font-weight:700">' + escapeHtml(p.Player) + '</span>' +
+      '<span style="color:var(--muted);font-size:11px">T' + p.Tier + '</span>' +
+    '</div>'
+  ).join('') : '<div style="padding:8px;color:var(--muted);font-size:12px">No available players</div>';
+}
+
+function addDhPlayer(id) {
+  if (!dhSelected.includes(id)) dhSelected.push(id);
+  document.getElementById('dhSearch').value = '';
+  renderDhResults();
+  renderDhChips();
+}
+
+function removeDhPlayer(id) {
+  dhSelected = dhSelected.filter(x => x !== id);
+  renderDhChips();
+}
+
+function renderDhChips() {
+  const box = document.getElementById('dhChips');
+  if (!dhSelected.length) { box.innerHTML = '<span style="font-size:12px;color:var(--muted)">Add at least 2 players above</span>'; return; }
+  box.innerHTML = dhSelected.map(id => {
+    const p = PLAYERS.find(x => x.Overall === id);
+    if (!p) return '';
+    return '<div class="dh-chip"><span class="pbadge ' + p.Position + '">' + p.Position + '</span>' + escapeHtml(p.Player) +
+      '<button onclick="removeDhPlayer(' + id + ')" title="Remove">✕</button></div>';
+  }).join('');
+}
+
+async function runDraftHimCompare() {
+  if (dhSelected.length < 2) { toast('⚠️ Add at least 2 players to compare'); return; }
+  const steps = picksUntilMyNextTurn();
+  updateDhContext();
+  const players = dhSelected.map(id => PLAYERS.find(p => p.Overall === id)).filter(Boolean);
+  const results = players.map(p => evaluatePlayerForDecision(p, steps));
+
+  // Recommend whoever's most at risk of vanishing before your next turn, but
+  // never a position you're already over-filled at.
+  const scored = results
+    .map(r => ({ ...r, score: (r.roster.need === 'over-filled' ? 1000 : 0) + r.survivalPct }))
+    .sort((a, b) => a.score - b.score);
+  const winner = scored[0];
+
+  renderDhOutput(scored, winner, steps);
+  await narrateDraftHimDecision(scored, winner, steps);
+}
+
+function renderDhOutput(scored, winner, steps) {
+  const needCls = n => n === 'hard need' ? 'dh-need-hard' : n === 'filled' ? 'dh-need-filled' : 'dh-need-over';
+  document.getElementById('dhOutput').innerHTML = scored.map(r => {
+    const isWinner = r.player.Overall === winner.player.Overall;
+    return '<div class="dh-card' + (isWinner ? ' recommended' : '') + '">' +
+      '<div class="dh-card-hdr"><span class="pbadge ' + r.player.Position + '">' + r.player.Position + '</span>' + escapeHtml(r.player.Player) +
+        (isWinner ? ' <span style="color:var(--green);font-size:11px;margin-left:auto">★ SUGGESTED</span>' : '') + '</div>' +
+      '<div class="dh-stat"><span>Survival to your next pick (' + steps + ' away)</span><strong>' + r.survivalPct + '%</strong></div>' +
+      '<div class="dh-stat"><span>Tier ' + r.player.Tier + ' remaining at ' + r.player.Position + '</span><strong>' + r.tierLeft + ' left</strong></div>' +
+      '<div class="dh-stat"><span>Your roster at ' + r.player.Position + '</span><strong class="' + needCls(r.roster.need) + '">' + r.roster.filled + '/' + r.roster.slots + ' — ' + r.roster.need + '</strong></div>' +
+    '</div>';
+  }).join('') + '<div class="dh-verdict loading" id="dhVerdict">Thinking…</div>';
+}
+
+// Only the one-line "why" comes from the model -- all figures above are already
+// computed. Uses Haiku (fast, cheap) since this is pure narration, not reasoning.
+async function narrateDraftHimDecision(scored, winner, steps) {
+  const verdictEl = document.getElementById('dhVerdict');
+  if (!claudeWorkerUrl || !claudeAppSecret) {
+    verdictEl.classList.remove('loading');
+    verdictEl.innerHTML = '<strong>DRAFT: ' + escapeHtml(winner.player.Player) + '</strong> — set up the Analyst proxy (⚙️ above) for the one-line reasoning too.';
+    return;
+  }
+  const summary = scored.map(r =>
+    r.player.Position + ' ' + r.player.Player + ': tier has ' + r.tierLeft + ' left, ' + r.survivalPct +
+    '% chance still there at your next pick (' + steps + ' picks away). Roster: ' + r.roster.filled + '/' + r.roster.slots + ' ' + r.player.Position + ' (' + r.roster.need + ').'
+  ).join('\n');
+  const prompt = 'DRAFT: ' + winner.player.Player + ' (' + winner.player.Position + ').\n\nData:\n' + summary +
+    '\n\nIn ONE short sentence (max ~25 words), explain why using the actual numbers above. No preamble, don\'t restate "DRAFT: X" -- just the reasoning.';
+
+  try {
+    const res = await fetch(claudeWorkerUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'X-App-Secret': claudeAppSecret },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5',
+        max_tokens: 120,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || ('HTTP ' + res.status));
+    const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join(' ').trim();
+    verdictEl.classList.remove('loading');
+    verdictEl.innerHTML = '<strong>DRAFT: ' + escapeHtml(winner.player.Player) + '</strong> — ' + escapeHtml(text || 'See the numbers above.');
+  } catch (e) {
+    verdictEl.classList.remove('loading');
+    verdictEl.innerHTML = '<strong>DRAFT: ' + escapeHtml(winner.player.Player) + '</strong> — (narration unavailable: ' + escapeHtml(e.message) + ')';
+  }
 }
 
 // ── CLAUDE FANTASY ANALYST ─────────────────────────────────────────────────────
