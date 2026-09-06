@@ -489,13 +489,13 @@ function renderSlottedRoster(picks) {
 function toggleMine(id) {
   if (mine.has(id)) { mine.delete(id); toast('Removed from roster'); }
   else { mine.add(id); drafted.add(id); toast('✅ Added to roster'); }
-  save(); render(); renderRoster(); checkWatchlistAlerts();
+  checkWatchlistAlerts(); save(); render(); renderRoster();
 }
 
 function toggleDrafted(id) {
   if (drafted.has(id)) { drafted.delete(id); mine.delete(id); toast('↩ Available'); }
   else { drafted.add(id); toast('❌ Drafted'); }
-  save(); render(); renderRoster(); checkWatchlistAlerts();
+  checkWatchlistAlerts(); save(); render(); renderRoster();
 }
 
 // ── WATCHLIST / ROUND ALERTS ───────────────────────────────────────────────────
@@ -513,7 +513,7 @@ function toggleWatch(id) {
     watchlist.set(id, { round, fired: false, resolved: false });
     toast('👁 Watching ' + (p ? p.Player : '') + ' from round ' + round);
   }
-  save(); render(); renderRoster(); checkWatchlistAlerts();
+  checkWatchlistAlerts(); save(); render(); renderRoster();
 }
 
 // Recomputes the current round from total picks made, checks every watched
@@ -1175,7 +1175,7 @@ function applyPicks(data) {
 
   if (mySlot) mine = syncMatches; // replace outright — see comment above
   mine.forEach(id => drafted.add(id));
-  save(); render(); renderRoster(); checkWatchlistAlerts();
+  checkWatchlistAlerts(); save(); render(); renderRoster();
 }
 
 // ── POLLING ───────────────────────────────────────────────────────────────────
@@ -1244,7 +1244,7 @@ function applyRoster() {
     if (m) { mine.add(m.Overall); drafted.add(m.Overall); }
     else bad.push(line);
   });
-  save(); render(); renderRoster(); checkWatchlistAlerts(); closeModals();
+  checkWatchlistAlerts(); save(); render(); renderRoster(); closeModals();
   if (bad.length) toast('⚠️ Not found: ' + bad.join(', '));
   else toast('✅ Roster set — ' + lines.length + ' players');
 }
@@ -1276,7 +1276,7 @@ function renderAddResults() {
 
 function quickAdd(id) {
   mine.add(id); drafted.add(id);
-  save(); render(); renderRoster(); renderAddResults(); checkWatchlistAlerts();
+  checkWatchlistAlerts(); save(); render(); renderRoster(); renderAddResults();
   toast('✅ Added');
 }
 
@@ -1426,10 +1426,10 @@ document.querySelectorAll('.overlay').forEach(el =>
 );
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
+checkWatchlistAlerts(); // establishes currentRound and resolves any already-due alerts before the first render paints badges
 render();
 renderRoster();
 renderClaudeChat();
-checkWatchlistAlerts(); // establishes currentRound and shows any already-due alerts
 wireClaudePlayerClicks('plist');
 wireClaudePlayerClicks('rplist');
 if (claudePanelOpen) {
