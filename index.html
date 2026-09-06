@@ -622,6 +622,16 @@ function resetAll() {
 async function connectSleeper() {
   const did = document.getElementById('inDraft').value.trim();
   if (!did) { toast('⚠️ Enter a Draft ID'); return; }
+  // Connecting to a genuinely different draft than last time (a new mock, or the
+  // real draft after mocking) -- re-arm the watchlist so a watch resolved/fired
+  // in the OLD draft doesn't silently stay resolved forever in this new one.
+  // Reset is the explicit way to do this; this covers just typing a new ID in
+  // and hitting Connect without remembering to click Reset first.
+  if (draftId && draftId !== did) {
+    watchlist.forEach(entry => { entry.fired = false; entry.resolved = false; });
+    totalPicksMade = 0;
+    toast('🔄 New draft detected — watchlist re-armed');
+  }
   draftId = did;
   mySlot = parseInt(document.getElementById('inSlot').value.trim()) || null;
 
@@ -1380,7 +1390,6 @@ const NICKNAMES = {
   'aj':'andre', 'andre':'aj',
   'tj':'terrell', 'terrell':'tj',
   'jj':'justin', 'justin':'jj',
-  'dk':'d.k.', 'stefon':'steve',
   'gabe':'gabriel', 'gabriel':'gabe',
   'mike':'michael', 'michael':'mike',
   'will':'william', 'william':'will',
