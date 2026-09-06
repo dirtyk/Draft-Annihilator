@@ -377,6 +377,15 @@ let claudeQuick = localStorage.getItem('kk_claude_quick') === '1';
 let watchlist = new Map(JSON.parse(localStorage.getItem('kk_watchlist') || '[]'));
 let teamsCount = parseInt(localStorage.getItem('kk_teamsCount')) || 12;
 let currentRound = 1;
+// The REAL total picks made in the draft, from Sleeper's raw picks array length --
+// NOT drafted.size. drafted.size only counts picks whose name matched something in
+// PLAYERS; any pick that misses (a name-format quirk, or a deep sleeper outside a
+// 200-player rankings sheet) is silently skipped, so drafted.size can undercount
+// real progress and drag round-based features (watchlist alerts, Draft Him/Not Him)
+// behind reality. totalPicksMade is immune to that -- it's just how many picks the
+// API says happened, matched or not. Falls back to drafted.size when not synced.
+let totalPicksMade = parseInt(localStorage.getItem('kk_totalPicksMade')) || 0;
+function picksMadeCount() { return totalPicksMade || drafted.size; }
 
 function save() {
   localStorage.setItem('kk_drafted', JSON.stringify([...drafted]));
@@ -385,6 +394,7 @@ function save() {
   if (mySlot) localStorage.setItem('kk_mySlot', mySlot); else localStorage.removeItem('kk_mySlot');
   localStorage.setItem('kk_watchlist', JSON.stringify([...watchlist]));
   localStorage.setItem('kk_teamsCount', String(teamsCount));
+  localStorage.setItem('kk_totalPicksMade', String(totalPicksMade));
 }
 
 // ── RENDER BOARD ──────────────────────────────────────────────────────────────
@@ -521,7 +531,7 @@ function toggleWatch(id) {
 // time a player's round arrives, and auto-clears anyone who's been drafted
 // (by anyone) since the watch is moot at that point.
 function checkWatchlistAlerts() {
-  currentRound = Math.max(1, Math.ceil(drafted.size / teamsCount));
+  currentRound = Math.max(1, Math.ceil(picksMadeCount() / teamsCount));
   let changed = false;
   watchlist.forEach((entry, id) => {
     if (entry.resolved) return; // already handled for this draft; Reset re-arms it
@@ -593,6 +603,7 @@ function resetAll() {
   // ones have already fired so they're ready to re-trigger in a fresh mock.
   watchlist.forEach(entry => { entry.fired = false; entry.resolved = false; });
   currentRound = 1;
+  totalPicksMade = 0;
   localStorage.removeItem('kk_rosterSlots'); localStorage.removeItem('kk_benchSlots');
   document.getElementById('inDraft').value = '';
   document.getElementById('inSlot').value = '';
@@ -711,11 +722,11 @@ function snakeSlotAtPick(overallPick, teams) {
 }
 
 // How many OTHER teams' picks happen between right now and my next turn.
-// Uses `drafted.size` as the current overall pick count (accurate while synced
-// to a live draft, which is this tool's intended use).
+// Uses picksMadeCount() (the real Sleeper pick count, not drafted.size) as the
+// current overall pick count -- see its definition for why that distinction matters.
 function picksUntilMyNextTurn() {
   const slot = mySlot || 1; // fall back to slot 1 if not connected -- still lets the tool run
-  let p = drafted.size + 1;
+  let p = picksMadeCount() + 1;
   if (snakeSlotAtPick(p, teamsCount) === slot) p++; // I'm on the clock now -- count from after this pick
   let count = 0;
   while (snakeSlotAtPick(p, teamsCount) !== slot && count <= teamsCount * 3) { count++; p++; }
@@ -775,8 +786,8 @@ function survivalProbabilities(candidates, steps, iterations = 500) {
   if (steps <= 0) { candidates.forEach(c => survives[c.Overall] = 1); return survives; }
 
   const basePool = PLAYERS.filter(p => !drafted.has(p.Overall)).sort((a, b) => a.Overall - b.Overall);
-  const rng = mulberry32((Date.now() * 7 + drafted.size + 1) & 0xffffffff);
-  const startPick = drafted.size + 1;
+  const rng = mulberry32((Date.now() * 7 + picksMadeCount() + 1) & 0xffffffff);
+  const startPick = picksMadeCount() + 1;
 
   for (let it = 0; it < iterations; it++) {
     let pool = basePool;
@@ -1144,6 +1155,7 @@ function importPaste() {
 
 function applyPicks(data) {
   drafted.clear();
+  totalPicksMade = data.filter(Boolean).length; // ground truth pick count, unaffected by name-match misses
 
   // Picks that belong to my slot *this fetch*, per Sleeper. Built fresh every
   // time rather than merged into the old `mine`, so a stale entry (a leftover
@@ -1187,12 +1199,12 @@ function startPolling() {
 
 async function poll() {
   if (!draftId) return;
-  const prev = drafted.size;
+  const prev = totalPicksMade;
   const ok = await doFetch();
   if (!ok) { stopPolling(); return; }
   flashDot();
-  document.getElementById('pollLabel').textContent = drafted.size + ' picks · ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  if (drafted.size > prev) toast('🔔 New pick made!');
+  document.getElementById('pollLabel').textContent = totalPicksMade + ' picks · ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  if (totalPicksMade > prev) toast('🔔 New pick made!');
 }
 
 function stopPolling() {
