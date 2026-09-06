@@ -100,6 +100,7 @@ body{background:url('data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgG
 .watch-banner{display:none;background:rgba(0,212,255,.1);border-bottom:2px solid var(--accent);padding:8px 16px;gap:8px;flex-wrap:wrap;align-items:center}
 .watch-banner.show{display:flex}
 .watch-pill{background:var(--surface2);border:1px solid var(--accent);border-radius:6px;padding:4px 6px 4px 10px;font-size:12px;display:flex;align-items:center;gap:8px}
+.watch-pill.resolved{border-color:var(--border);opacity:.65}
 .watch-pill .wp-close{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 4px}
 .watch-pill .wp-close:hover{color:var(--red)}
 
@@ -564,13 +565,18 @@ function dismissWatch(id) {
 
 function renderWatchBanner() {
   const banner = document.getElementById('watchBanner');
-  const fired = [...watchlist.entries()]
-    .filter(([id, e]) => e.fired && !e.resolved)
-    .map(([id, e]) => ({ id, round: e.round, p: PLAYERS.find(x => x.Overall === id) }))
+  // A fired alert stays visible until YOU dismiss it -- even after the player
+  // gets drafted (resolved) and auto-clears from active tracking. Otherwise a
+  // brief toast is the only evidence it ever fired, and it's easy to miss mid-
+  // draft with several panels open; this way there's always a lasting trace.
+  const items = [...watchlist.entries()]
+    .filter(([id, e]) => e.fired)
+    .map(([id, e]) => ({ id, round: e.round, resolved: e.resolved, p: PLAYERS.find(x => x.Overall === id) }))
     .filter(x => x.p);
-  if (!fired.length) { banner.classList.remove('show'); banner.innerHTML = ''; return; }
-  banner.innerHTML = fired.map(x =>
-    '<div class="watch-pill">👁 Rd' + x.round + ' — <strong>' + x.p.Player + '</strong> (' + x.p.Position + ')' +
+  if (!items.length) { banner.classList.remove('show'); banner.innerHTML = ''; return; }
+  banner.innerHTML = items.map(x =>
+    '<div class="watch-pill' + (x.resolved ? ' resolved' : '') + '">' + (x.resolved ? '✓' : '👁') + ' Rd' + x.round + ' — <strong>' + x.p.Player + '</strong> (' + x.p.Position + ')' +
+    (x.resolved ? ' <span style="color:var(--muted)">— drafted</span>' : '') +
     '<button class="wp-close" onclick="dismissWatch(' + x.id + ')" title="Dismiss">✕</button></div>'
   ).join('');
   banner.classList.add('show');
